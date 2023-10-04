@@ -10,6 +10,8 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.github.nilsbaumgartner1994.redcliffjava.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
+        <!-- Adding the StartupActivity registration here -->
+        <postStartupActivity implementation="com.github.nilsbaumgartner1994.redcliffjava.listeners.MyStartupActivity"/>
     </extensions>
 
     <applicationListeners>
