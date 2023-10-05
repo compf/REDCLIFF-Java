@@ -36,22 +36,14 @@ public class Starter implements ApplicationStarter {
     public void main(@NotNull List<String> args) {
         System.out.println("AST PARSER");
 
-        String projectPath = ".";
+            String projectPath = "/data/";
 
 
-        ProjectManager projectManager = ProjectManager.getInstance();
-        try {
-            Project project = projectManager.loadAndOpenProject(projectPath);
-            StartupManager.getInstance(project).runWhenProjectIsInitialized(() -> {
-                // Your code after project is loaded
-                System.out.println("Project is loaded");
 
-                //TODO load all dependencies
 
-                JavaFileAnalyzer analyzer = new JavaFileAnalyzer(project);
-                analyzer.analyze();
-
-                /**
+            ProjectManager projectManager = ProjectManager.getInstance();
+            try {
+                Project project = projectManager.loadAndOpenProject(projectPath);
                 ProjectSystemId projectSystemId = new ProjectSystemId("GRADLE");
                 System.out.println("refreshProject start");
                 System.out.println("project.getBasePath(): "+project.getBasePath());
@@ -66,8 +58,12 @@ public class Starter implements ApplicationStarter {
                             public void onSuccess(DataNode<ProjectData> externalProject) {
                                 System.out.println("Project dependencies synchronized successfully.");
 
-                                JavaFileAnalyzer analyzer = new JavaFileAnalyzer(project);
-                                analyzer.analyze();
+                                ApplicationManager.getApplication().runReadAction(() -> {
+                                            // Your code that needs read access goes here
+                                    JavaFileAnalyzer analyzer = new JavaFileAnalyzer(project);
+                                    analyzer.analyze();
+
+                                        });
                             }
 
                             public void onFailure(@NotNull String errorMessage, @NotNull String errorDetails) {
@@ -78,15 +74,11 @@ public class Starter implements ApplicationStarter {
                         false,
                         ProgressExecutionMode.MODAL_SYNC
                 );
-                 */
-
-                //startAnalysis(args, project);
-            });
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        } catch (JDOMException e) {
-            throw new RuntimeException(e);
-        }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            } catch (JDOMException e) {
+                throw new RuntimeException(e);
+            }
 
     }
 
