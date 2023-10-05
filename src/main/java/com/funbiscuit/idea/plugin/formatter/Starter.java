@@ -11,6 +11,7 @@ import com.intellij.openapi.externalSystem.model.project.ProjectData;
 import com.intellij.openapi.externalSystem.service.execution.ProgressExecutionMode;
 import com.intellij.openapi.externalSystem.service.project.ExternalProjectRefreshCallback;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil;
+import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.startup.StartupManager;
@@ -43,13 +44,11 @@ public class Starter implements ApplicationStarter {
 
             ProjectManager projectManager = ProjectManager.getInstance();
             try {
+                System.out.println("Load and open project");
                 Project project = projectManager.loadAndOpenProject(projectPath);
                 ProjectSystemId projectSystemId = new ProjectSystemId("GRADLE");
-                System.out.println("refreshProject start");
-                System.out.println("project.getBasePath(): "+project.getBasePath());
-                System.out.println("project.getProjectFilePath(): "+project.getProjectFilePath());
-                System.out.println("project.getBaseDir(): "+project.getBaseDir().getPath());
 
+                System.out.println("Start refreshing project");
                 ExternalSystemUtil.refreshProject(
                         project,
                         projectSystemId,
@@ -57,13 +56,20 @@ public class Starter implements ApplicationStarter {
                         new ExternalProjectRefreshCallback() {
                             public void onSuccess(DataNode<ProjectData> externalProject) {
                                 System.out.println("Project dependencies synchronized successfully.");
+                                System.out.println("Start indexing project");
 
-                                ApplicationManager.getApplication().runReadAction(() -> {
-                                            // Your code that needs read access goes here
-                                    JavaFileAnalyzer analyzer = new JavaFileAnalyzer(project);
-                                    analyzer.analyze();
+                                // Use DumbService to wait for indexing to complete
+                                DumbService.getInstance(project).runWhenSmart(() -> {
+                                    System.out.println("Project indexed successfully.");
 
-                                        });
+                                    System.out.println("Wait for read access");
+                                    ApplicationManager.getApplication().runReadAction(() -> {
+                                        System.out.println("Start analysis");
+                                        // Your code that needs read access goes here
+                                        JavaFileAnalyzer analyzer = new JavaFileAnalyzer(project);
+                                        analyzer.analyze();
+                                    });
+                                });
                             }
 
                             public void onFailure(@NotNull String errorMessage, @NotNull String errorDetails) {
