@@ -10,6 +10,7 @@
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.java</depends>
+    <depends>com.intellij.gradle</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <appStarter implementation="com.funbiscuit.idea.plugin.formatter.Starter"/>

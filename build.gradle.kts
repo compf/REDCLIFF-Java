@@ -20,7 +20,7 @@ intellij {
     version.set("2023.1.3")
     type.set("IC") // Target IDE Platform
 
-    plugins.set(listOf("java", "com.intellij.java", "org.jetbrains.plugins.gradle"))
+    plugins.set(listOf("com.intellij.java", "com.intellij.gradle"))
 }
 
 dependencies {
