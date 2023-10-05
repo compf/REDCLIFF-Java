@@ -5,3 +5,5 @@
 .DS_Store
 
 TestProject/.gradle/
+
+gradle_cache/
