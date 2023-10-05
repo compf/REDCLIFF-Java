@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  idea-parser:
+    image: nilsbaumgartner1994/idea-parser
+    volumes:
+#      - ${FOLDER:-/Users/nbaumgartner/Desktop/TestProject}:/data
+      - ${FOLDER:-/Users/nbaumgartner/Downloads/idea-formatter-plugin-master/TestProject}:/data
+    command:
+      - "./"
+      - "--mask"
+      - "*.java"
