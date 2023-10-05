@@ -1,4 +1,4 @@
 #!/bin/bash
 # script to run formatter from docker container
 
-/app/idea/bin/idea.sh formatter -Djava.awt.headless=true "$@"
+JAVA_OPTS="-Xmx10g" /app/idea/bin/idea.sh formatter -Djava.awt.headless=true "$@"
