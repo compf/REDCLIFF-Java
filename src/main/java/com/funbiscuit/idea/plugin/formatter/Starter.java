@@ -40,9 +40,12 @@ public class Starter implements ApplicationStarter {
                 // Your code after project is loaded
                 System.out.println("Project is loaded");
 
-                ExternalSystemUtil.refreshProject(project, GradleConstants.SYSTEM_ID);
+                //ExternalSystemUtil.refreshProject(project, GradleConstants.SYSTEM_ID);
 
-                startAnalysis(args, project);
+                JavaFileAnalyzer analyzer = new JavaFileAnalyzer(project);
+                analyzer.analyze();
+
+                //startAnalysis(args, project);
             });
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -51,6 +54,8 @@ public class Starter implements ApplicationStarter {
         }
 
     }
+
+
 
     private void startAnalysis(@NotNull List<String> args, Project project){
         try {
