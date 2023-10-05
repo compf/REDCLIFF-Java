@@ -54,10 +54,14 @@ public class Starter implements ApplicationStarter {
 
                 ProjectSystemId projectSystemId = new ProjectSystemId("GRADLE");
                 System.out.println("refreshProject start");
+                System.out.println("project.getBasePath(): "+project.getBasePath());
+                System.out.println("project.getProjectFilePath(): "+project.getProjectFilePath());
+                System.out.println("project.getBaseDir(): "+project.getBaseDir().getPath());
+
                 ExternalSystemUtil.refreshProject(
                         project,
                         projectSystemId,
-                        project.getProjectFilePath(),
+                        "./data/"+project.getProjectFilePath(),
                         new ExternalProjectRefreshCallback() {
                             public void onSuccess() {
                                 System.out.println("Project dependencies synchronized successfully.");
