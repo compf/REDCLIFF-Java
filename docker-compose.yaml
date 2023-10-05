@@ -5,8 +5,8 @@ services:
     mem_limit: 12g
     image: nilsbaumgartner1994/idea-parser
     volumes:
-      - ${FOLDER:-/Users/nbaumgartner/Desktop/TestProject}:/data
-#      - ${FOLDER:-/Users/nbaumgartner/Documents/GitHub/REDCLIFF-Java/TestProject}:/data
+#      - ${FOLDER:-/Users/nbaumgartner/Desktop/TestProject}:/data
+      - ${FOLDER:-/Users/nbaumgartner/Documents/GitHub/REDCLIFF-Java/TestProject}:/data
     command:
       - "./"
       - "--mask"

@@ -5,7 +5,9 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ApplicationStarter;
 import com.intellij.openapi.application.ex.ApplicationEx;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.externalSystem.model.DataNode;
 import com.intellij.openapi.externalSystem.model.ProjectSystemId;
+import com.intellij.openapi.externalSystem.model.project.ProjectData;
 import com.intellij.openapi.externalSystem.service.execution.ProgressExecutionMode;
 import com.intellij.openapi.externalSystem.service.project.ExternalProjectRefreshCallback;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil;
@@ -46,12 +48,10 @@ public class Starter implements ApplicationStarter {
 
                 //TODO load all dependencies
 
+                JavaFileAnalyzer analyzer = new JavaFileAnalyzer(project);
+                analyzer.analyze();
+
                 /**
-                GradleDependencyLoader loader = new GradleDependencyLoader(project);
-                loader.refreshGradleDependencies();
-                */
-
-
                 ProjectSystemId projectSystemId = new ProjectSystemId("GRADLE");
                 System.out.println("refreshProject start");
                 System.out.println("project.getBasePath(): "+project.getBasePath());
@@ -61,9 +61,9 @@ public class Starter implements ApplicationStarter {
                 ExternalSystemUtil.refreshProject(
                         project,
                         projectSystemId,
-                        "./data/"+project.getProjectFilePath(),
+                        "/data",
                         new ExternalProjectRefreshCallback() {
-                            public void onSuccess() {
+                            public void onSuccess(DataNode<ProjectData> externalProject) {
                                 System.out.println("Project dependencies synchronized successfully.");
 
                                 JavaFileAnalyzer analyzer = new JavaFileAnalyzer(project);
@@ -78,6 +78,7 @@ public class Starter implements ApplicationStarter {
                         false,
                         ProgressExecutionMode.MODAL_SYNC
                 );
+                 */
 
                 //startAnalysis(args, project);
             });

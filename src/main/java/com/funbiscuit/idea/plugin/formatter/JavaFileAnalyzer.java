@@ -7,8 +7,10 @@ import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.util.PsiTreeUtil;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 public class JavaFileAnalyzer {
@@ -20,48 +22,88 @@ public class JavaFileAnalyzer {
     }
 
     public void analyze() {
-        System.out.println("analyze");
+        System.out.println("Analyzing project: " + project.getName());
 
-        PsiManager psiManager = PsiManager.getInstance(project);
-        GlobalSearchScope scope = GlobalSearchScope.allScope(project);
+        // search for all java classes in project
 
         List<PsiClass> allClasses = new ArrayList<>();
+        Collection<VirtualFile> virtualFiles = new ArrayList<>();
 
-        // Iterate over all files in the project using ProjectFileIndex
-        ProjectFileIndex projectFileIndex = ProjectFileIndex.getInstance(project);
-        projectFileIndex.iterateContent(vFile -> {
-            // Check if the file is a Java file
-            if (vFile.getFileType() == JavaFileType.INSTANCE) {
-                PsiFile psiFile = psiManager.findFile(vFile);
-                if (psiFile instanceof PsiJavaFile) {
-                    PsiClass[] classesInFile = ((PsiJavaFile) psiFile).getClasses();
-                    for (PsiClass psiClass : classesInFile) {
-                        allClasses.add(psiClass);
-                    }
-                }
+        List<VirtualFile> allFiles = new ArrayList<>();
+        VirtualFile baseDir = project.getBaseDir();
+        VfsUtilCore.iterateChildrenRecursively(baseDir, virtualFile -> true, virtualFile -> {
+            if (!virtualFile.isDirectory() && virtualFile.getFileType() == JavaFileType.INSTANCE) {
+                allFiles.add(virtualFile);
             }
-            return true; // Continue iteration
+            return true;
         });
+        System.out.println("A: Found " + allFiles.size() + " java files");
+        virtualFiles.addAll(allFiles);
 
-        System.out.println("get all java classes");
-        System.out.println("amount found: " + allClasses.size());
 
-        for (PsiClass psiClass : allClasses) {
-            System.out.println("class: " + psiClass.getQualifiedName());
-            PsiReferenceList extendsList = psiClass.getExtendsList();
-            if (extendsList != null) {
-                for (PsiJavaCodeReferenceElement reference : extendsList.getReferenceElements()) {
-                    System.out.println("-- "+reference.getQualifiedName());
-                    PsiElement resolved = reference.resolve();
-                    if (resolved instanceof PsiClass) {
-                        System.out.println(((PsiClass) resolved).getQualifiedName());
-                    }
+        // Does not work
+        //virtualFiles = com.intellij.psi.search.FileTypeIndex.getFiles(JavaFileType.INSTANCE,
+        //        GlobalSearchScope.projectScope(project));
+        //        System.out.println("B: Found " + virtualFiles.size() + " java files");
+
+        for (VirtualFile virtualFile : virtualFiles) {
+            PsiFile currentFile = PsiManager.getInstance(project).findFile(virtualFile);
+
+            System.out.println("File: " + currentFile.getName());
+
+            Collection<PsiClass> classesInFile = PsiTreeUtil.findChildrenOfType(currentFile, PsiClass.class);
+            for (PsiClass c : classesInFile) {
+                if (c.getQualifiedName() != null) {
+                    traverseClasses(c);
                 }
-            } else {
-                System.out.println("No extend list");
             }
         }
 
-        System.out.println("finished");
+    }
+
+    private void traverseClasses(PsiClass currentClass){
+        // print the class with all important information
+        System.out.println("");
+
+        // print the class name
+        System.out.println("Class: " + currentClass.getName() + " QN: " + currentClass.getQualifiedName());
+
+        // print the superclass
+        PsiClass superClass = currentClass.getSuperClass();
+        if (superClass != null) {
+            System.out.println("--Extends: " + superClass.getQualifiedName());
+        } else {
+            System.out.println("--No superclass detected or not in scope");
+        }
+
+        PsiClass[] supers = currentClass.getSupers();
+        System.out.println("--Supers: " + supers.length);
+        for(PsiClass superClazz : supers){
+            System.out.println("--Super: " + superClazz.getQualifiedName());
+        }
+
+        // print the implemented interfaces
+        PsiClass[] interfaces = currentClass.getInterfaces();
+
+        System.out.println("--Implements: " + interfaces.length);
+
+        System.out.println("Using Reference");
+
+        PsiReferenceList extendsList = currentClass.getExtendsList();
+        PsiReferenceList implementsList = currentClass.getImplementsList();
+
+        if (extendsList != null) {
+            for (PsiJavaCodeReferenceElement reference : extendsList.getReferenceElements()) {
+                System.out.println("  Extends: " + reference.getQualifiedName());
+            }
+        }
+        if (implementsList != null) {
+            for (PsiJavaCodeReferenceElement reference : implementsList.getReferenceElements()) {
+                System.out.println("  Implements: " + reference.getQualifiedName());
+            }
+        }
+
+        System.out.println("");
+
     }
 }
