@@ -5,7 +5,7 @@ services:
     image: nilsbaumgartner1994/idea-parser
     volumes:
 #      - ${FOLDER:-/Users/nbaumgartner/Desktop/TestProject}:/data
-      - ${FOLDER:-/Users/nbaumgartner/Downloads/idea-formatter-plugin-master/TestProject}:/data
+      - ${FOLDER:-/Users/nbaumgartner/Documents/GitHub/REDCLIFF-Java/TestProject}:/data
     command:
       - "./"
       - "--mask"

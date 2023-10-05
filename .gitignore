@@ -1,6 +1,3 @@
-.gradle
-.idea
-.qodana
-build
-
-.DS_Store
+/.gradle
+/build
+/.idea
