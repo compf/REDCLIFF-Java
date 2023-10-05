@@ -1,13 +1,16 @@
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "1.8.22"
-    id("org.jetbrains.intellij") version "1.14.2"
+    id("org.jetbrains.intellij") version "1.15.0"
 }
 
 group = "com.funbiscuit.idea.plugin"
 version = "1.0-SNAPSHOT"
 
 repositories {
+    maven("https://cache-redirector.jetbrains.com/intellij-dependencies")
+    maven("https://cache-redirector.jetbrains.com/repo1.maven.org/maven2")
+    maven("https://plugins.gradle.org/m2")
     mavenCentral()
 }
 
@@ -17,7 +20,7 @@ intellij {
     version.set("2023.1.3")
     type.set("IC") // Target IDE Platform
 
-    plugins.set(listOf(/* Plugin Dependencies */"java", "com.intellij.java"))
+    plugins.set(listOf("java", "com.intellij.java", "org.jetbrains.plugins.gradle"))
 }
 
 dependencies {

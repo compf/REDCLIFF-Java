@@ -5,6 +5,9 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ApplicationStarter;
 import com.intellij.openapi.application.ex.ApplicationEx;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.externalSystem.model.ProjectSystemId;
+import com.intellij.openapi.externalSystem.service.execution.ProgressExecutionMode;
+import com.intellij.openapi.externalSystem.service.project.ExternalProjectRefreshCallback;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
@@ -16,6 +19,7 @@ import picocli.CommandLine;
 
 import java.io.IOException;
 import java.util.List;
+
 
 public class Starter implements ApplicationStarter {
     private static final Logger LOG = Logger.getInstance(Starter.class);
@@ -40,10 +44,36 @@ public class Starter implements ApplicationStarter {
                 // Your code after project is loaded
                 System.out.println("Project is loaded");
 
-                //ExternalSystemUtil.refreshProject(project, GradleConstants.SYSTEM_ID);
+                //TODO load all dependencies
 
-                JavaFileAnalyzer analyzer = new JavaFileAnalyzer(project);
-                analyzer.analyze();
+                /**
+                GradleDependencyLoader loader = new GradleDependencyLoader(project);
+                loader.refreshGradleDependencies();
+                */
+
+
+                ProjectSystemId projectSystemId = new ProjectSystemId("GRADLE");
+                System.out.println("refreshProject start");
+                ExternalSystemUtil.refreshProject(
+                        project,
+                        projectSystemId,
+                        project.getProjectFilePath(),
+                        new ExternalProjectRefreshCallback() {
+                            public void onSuccess() {
+                                System.out.println("Project dependencies synchronized successfully.");
+
+                                JavaFileAnalyzer analyzer = new JavaFileAnalyzer(project);
+                                analyzer.analyze();
+                            }
+
+                            public void onFailure(@NotNull String errorMessage, @NotNull String errorDetails) {
+                                System.err.println("Failed to synchronize project dependencies: " + errorMessage);
+                                LOG.error("Failed to synchronize project dependencies: " + errorDetails);
+                            }
+                        }, // Passing null for the callback since there's no direct callback in this method
+                        false,
+                        ProgressExecutionMode.MODAL_SYNC
+                );
 
                 //startAnalysis(args, project);
             });
