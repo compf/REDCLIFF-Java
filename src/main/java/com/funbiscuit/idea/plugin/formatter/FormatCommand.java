@@ -10,6 +10,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ex.ProjectManagerEx;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VfsUtil;
+import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.psi.PsiManager;
@@ -35,6 +36,12 @@ import java.util.regex.Pattern;
         name = "formatter",
         description = "Formats and rearranges code according IDEA Code Style settings")
 public class FormatCommand implements Callable<Integer> {
+
+    public FormatCommand(Project project){
+        this.project = project;
+        this.projectPath = Path.of(project.getProjectFilePath());
+
+    }
     private static final StdIoMessageOutput messageOutput = StdIoMessageOutput.INSTANCE;
     private static final String PROJECT_DIR_PREFIX = "idea.reformat.";
     private static final String PROJECT_DIR_SUFFIX = ".tmp";
@@ -88,14 +95,30 @@ public class FormatCommand implements Callable<Integer> {
             return CommandLine.ExitCode.SOFTWARE;
         }
 
-        createTempProject();
+        //createTempProject();
 
         //loadSettings(style);
+        VirtualFile baseDir = project.getBaseDir();
+        VfsUtilCore.iterateChildrenRecursively(baseDir, virtualFile -> {
+            if (virtualFile.getName().equals(".idea")) {
+                return false;
+            }
+            return true;
+        }, virtualFile -> {
+            if (!virtualFile.isDirectory()) {
+                // Process the file
+                System.out.println(virtualFile.getPath());
+            }
+            return true;
+        });
+
 
         fileProcessor = new FileFormatter();
 
         List<Path> allFiles = new ArrayList<>();
         messageOutput.info("Counting files...\n");
+
+
         for (var path : files) {
             try (var stream = Files.walk(path, recursive ? Integer.MAX_VALUE : 1)) {
                 List<Path> dirFiles = stream

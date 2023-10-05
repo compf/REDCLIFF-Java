@@ -1,6 +1,6 @@
 package com.hello;
 
-public class Hello extends HelloParent{
+public class HelloParent{
     private int number;
 
     public void hello(int number){
