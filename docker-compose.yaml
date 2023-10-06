@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+  idea-parser:
+    mem_limit: 12g
+    stdin_open: true
+    tty: true
+    image: nilsbaumgartner1994/idea-parser
+    environment:
+      - GRADLE_USER_HOME=/gradle_cache
+    volumes:
+      - ./:/app
+      - ${FOLDER:-/Users/nbaumgartner/Desktop/TestProject}:/data
+      - ${OUTPUT:-./Result}:/output
+      - ./gradle_cache:/gradle_cache  # This maps the gradle_cache directory on your host to /gradle_cache in the container
+    command:
+      - "./runDemoCLI.sh"
+      - "/data"
+      - "/output"
