@@ -89,8 +89,6 @@ public class Starter implements ApplicationStarter {
 
                                         checkRequirements(project);
 
-                                        FileBasedIndex.getInstance().requestRebuild(JavaFullClassNameIndex.getInstance().getKey());
-
                                         System.out.println("Start analysis");
                                         // Your code that needs read access goes here
                                         JavaFileAnalyzer analyzer = new JavaFileAnalyzer(project);
