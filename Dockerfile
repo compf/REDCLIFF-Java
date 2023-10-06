@@ -2,16 +2,25 @@ FROM ubuntu:jammy-20230624
 
 WORKDIR /app
 
-# Install necessary packages
+# Install necessary packages and Java 17
 RUN apt-get update \
-  && apt-get install -y unzip wget libfreetype6 fontconfig \
+  && apt-get install -y unzip wget libfreetype6 fontconfig openjdk-17-jdk \
   && rm -rf /var/lib/apt/lists/*
+
+# Set JAVA_HOME environment variable
+ENV JAVA_HOME /usr/lib/jvm/java-17-openjdk-amd64
 
 # Download and extract IntelliJ IDEA
 RUN wget https://download.jetbrains.com/idea/ideaIC-2023.2.tar.gz \
     && tar -xzf ideaIC-2023.2.tar.gz \
     && rm ideaIC-2023.2.tar.gz \
     && mv idea-* idea
+
+# Set the JAVA_HOME for IntelliJ IDEA
+RUN echo "idea.jdk=$JAVA_HOME" >> /app/idea/bin/idea.properties
+
+# Create Maven repository directory
+RUN mkdir -p /root/.m2/repository
 
 # Set the working directory to /app/idea for plugin operations
 WORKDIR /app/idea
