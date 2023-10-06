@@ -8,9 +8,9 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 # Download and extract IntelliJ IDEA
-RUN wget https://download.jetbrains.com/idea/ideaIC-2023.1.3.tar.gz \
-    && tar -xzf ideaIC-2023.1.3.tar.gz \
-    && rm ideaIC-2023.1.3.tar.gz \
+RUN wget https://download.jetbrains.com/idea/ideaIC-2023.2.tar.gz \
+    && tar -xzf ideaIC-2023.2.tar.gz \
+    && rm ideaIC-2023.2.tar.gz \
     && mv idea-* idea
 
 # Set the working directory to /app/idea for plugin operations
