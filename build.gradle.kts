@@ -1,58 +1,60 @@
+group = "org.jetbrains.research.refactoringDemoPlugin"
+version = "1.0"
+
+fun properties(key: String) = project.findProperty(key).toString()
+
 plugins {
-    id("java")
-    id("org.jetbrains.kotlin.jvm") version "1.8.22"
-    id("org.jetbrains.intellij") version "1.15.0"
+    java
+    kotlin("jvm") version "1.8.10" apply true
+    id("org.jetbrains.intellij") version "1.13.2" apply true
+    id("org.jlleitschuh.gradle.ktlint") version "10.0.0" apply true
 }
 
-group = "com.funbiscuit.idea.plugin"
-version = "1.0-SNAPSHOT"
-
-repositories {
-    maven("https://cache-redirector.jetbrains.com/intellij-dependencies")
-    maven("https://cache-redirector.jetbrains.com/repo1.maven.org/maven2")
-    maven("https://plugins.gradle.org/m2")
-    mavenCentral()
-}
-
-// Configure Gradle IntelliJ Plugin
-// Read more: https://plugins.jetbrains.com/docs/intellij/tools-gradle-intellij-plugin.html
-intellij {
-    version.set("2023.2")
-    type.set("IC") // Target IDE Platform
-
-    plugins.set(listOf("com.intellij.java", "com.intellij.gradle"))
-}
-
-dependencies {
-    implementation("info.picocli:picocli:4.7.4")
-}
-
-tasks {
-    // Set the JVM compatibility versions
-    withType<JavaCompile> {
-        sourceCompatibility = "17"
-        targetCompatibility = "17"
-    }
-    withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-        kotlinOptions.jvmTarget = "17"
+allprojects {
+    apply {
+        plugin("java")
+        plugin("kotlin")
+        plugin("org.jetbrains.intellij")
+        plugin("org.jlleitschuh.gradle.ktlint")
     }
 
-    patchPluginXml {
-        sinceBuild.set("232")
-        untilBuild.set("232.*")
+    repositories {
+        maven("https://packages.jetbrains.team/maven/p/big-code/bigcode")
+        mavenCentral()
+        maven("https://packages.jetbrains.team/maven/p/ki/maven")
     }
 
-    signPlugin {
-        certificateChain.set(System.getenv("CERTIFICATE_CHAIN"))
-        privateKey.set(System.getenv("PRIVATE_KEY"))
-        password.set(System.getenv("PRIVATE_KEY_PASSWORD"))
+    intellij {
+        version.set(properties("platformVersion"))
+        type.set(properties("platformType"))
+        downloadSources.set(properties("platformDownloadSources").toBoolean())
+        updateSinceUntilBuild.set(true)
+        plugins.set(properties("platformPlugins").split(',').map(String::trim).filter(String::isNotEmpty))
     }
 
-    publishPlugin {
-        token.set(System.getenv("PUBLISH_TOKEN"))
+    ktlint {
+        enableExperimentalRules.set(true)
+        disabledRules.set(setOf("no-wildcard-imports", "import-ordering"))
+        filter {
+            exclude("**/resources/**")
+        }
     }
 
-    buildSearchableOptions {
-        enabled = false
+    val jvmVersion = "17"
+
+    tasks {
+        withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
+            kotlinOptions {
+                jvmTarget = jvmVersion
+            }
+        }
+
+        withType<JavaCompile> {
+            sourceCompatibility = jvmVersion
+            targetCompatibility = jvmVersion
+        }
+
+        withType<org.jetbrains.intellij.tasks.BuildSearchableOptionsTask>()
+            .forEach { it.enabled = false }
     }
 }

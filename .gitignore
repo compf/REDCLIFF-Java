@@ -7,3 +7,9 @@
 TestProject/.gradle/
 
 gradle_cache/
+
+/.idea/
+/.gradle/
+/build/
+demo-plugin/build/
+demo-cli/build/
