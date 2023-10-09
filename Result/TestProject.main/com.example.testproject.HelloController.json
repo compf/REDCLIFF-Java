@@ -1,0 +1,63 @@
+{
+  "modifiers": [
+    "public"
+  ],
+  "fields": {
+    "com.example.testproject.HelloController/memberField/welcomeText": {
+      "classOrInterfaceKey": "com.example.testproject.HelloController",
+      "modifiers": [
+        "@FXML\n",
+        "private"
+      ],
+      "ignore": false,
+      "name": "welcomeText",
+      "key": "com.example.testproject.HelloController/memberField/welcomeText",
+      "type": "Label",
+      "hasTypeVariable": false,
+      "position": {
+        "startLine": 7,
+        "startColumn": 5,
+        "endLine": 8,
+        "endColumn": 31
+      }
+    }
+  },
+  "methods": {
+    "com.example.testproject.HelloController/method/onHelloButtonClick()": {
+      "modifiers": [
+        "@FXML\n",
+        "protected"
+      ],
+      "overrideAnnotation": false,
+      "parameters": [],
+      "classOrInterfaceKey": "com.example.testproject.HelloController",
+      "name": "onHelloButtonClick",
+      "key": "com.example.testproject.HelloController/method/onHelloButtonClick()",
+      "type": "void",
+      "hasTypeVariable": false,
+      "position": {
+        "startLine": 10,
+        "startColumn": 5,
+        "endLine": 13,
+        "endColumn": 6
+      }
+    }
+  },
+  "file_path": "/Users/nbaumgartner/Desktop/TestProject/src/main/java/com/example/testproject/HelloController.java",
+  "anonymous": false,
+  "auxclass": false,
+  "implements_": [],
+  "extends_": [],
+  "innerDefinedClasses": {},
+  "innerDefinedInterfaces": {},
+  "name": "HelloController",
+  "key": "com.example.testproject.HelloController",
+  "type": "class",
+  "hasTypeVariable": false,
+  "position": {
+    "startLine": 6,
+    "startColumn": 1,
+    "endLine": 14,
+    "endColumn": 2
+  }
+}
