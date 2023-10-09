@@ -431,24 +431,22 @@ class JavaKotlinDocExtractor : CliktCommand() {
         }
     }
 
-    private fun getModifiers(modifierList: PsiModifierList?): ArrayList<String>{
+    private fun getModifiers(modifierList: PsiModifierList?): ArrayList<String> {
         val returnList = ArrayList<String>()
-        if(modifierList == null){
+        if (modifierList == null) {
             return returnList
         }
 
+        // Split the text of the PsiModifierList into words
+        val words = modifierList.text.split("\\s+".toRegex()) // this way we keep the order of the modifiers
 
-        // TODO
-        //  "modifiers": [
-        //        "@Override\n",
-        //        "public"
-        //      ],
-        val modifiers = modifierList.text.split(" ")
-        for(modifier in modifiers){
-            if(modifier != ""){
-                returnList.add(modifier)
+        // Check each word to see if it's a valid Java modifier
+        for (word in words) {
+            if (PsiModifier.MODIFIERS.contains(word)) {
+                returnList.add(word)
             }
         }
+
         return returnList
     }
 
@@ -456,6 +454,4 @@ class JavaKotlinDocExtractor : CliktCommand() {
         val psiFiles = this.findPsiFilesByExtension(extension)
         return psiFiles.flatMap { it.extractElementsOfType(PsiClass::class.java) }
     }
-
-    data class DatasetItem(val methodName: String, val javaDoc: String, val qualifiedName: String?, val superClasses: String?)
 }
