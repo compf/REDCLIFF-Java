@@ -13,3 +13,4 @@ gradle_cache/
 /build/
 demo-plugin/build/
 demo-cli/build/
+Result/
