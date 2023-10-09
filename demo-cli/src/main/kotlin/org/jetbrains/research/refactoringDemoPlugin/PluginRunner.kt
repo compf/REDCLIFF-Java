@@ -11,6 +11,9 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.*
+import com.intellij.testFramework.HeavyPlatformTestCase.cleanupApplicationCaches
+import com.intellij.testFramework.common.cleanupApplicationCaches
+import com.intellij.util.indexing.FileBasedIndex
 import org.jetbrains.research.pluginUtilities.openRepository.getKotlinJavaRepositoryOpener
 import org.jetbrains.research.refactoringDemoPlugin.parsedAstTypes.*
 import org.jetbrains.research.refactoringDemoPlugin.util.extractElementsOfType
@@ -44,6 +47,18 @@ class JavaKotlinDocExtractor : CliktCommand() {
     override fun run() {
         println("Starting")
         deleteAllFilesRecursiveInFolder(output)
+
+        // Delete caches
+        val projectManager = ProjectManager.getInstance()
+        val project = projectManager.loadAndOpenProject(input.toPath().toString())
+        try{
+            if (project != null) {
+                //projectManager.closeAndDispose(project)
+            }
+        } catch (e: Exception){
+            println("Error while closing project")
+            println(e)
+        }
 
         val repositoryOpener = getKotlinJavaRepositoryOpener()
         repositoryOpener.openProjectWithResolve(input.toPath()) { project ->
@@ -162,7 +177,13 @@ class JavaKotlinDocExtractor : CliktCommand() {
             classContext.type = "interface"
         }
 
-        classContext.position = getAstPosition(psiClass.textRange,psiClass.project,psiClass.containingFile)
+        var nameRange = psiClass.textRange
+        val nameTextRange = psiClass.nameIdentifier?.textRange
+        if(nameTextRange!=null){
+            nameRange = nameTextRange
+        }
+
+        classContext.position = getAstPosition(psiClass.name, nameRange,psiClass.project,psiClass.containingFile)
         classContext.anonymous = psiClass.name == null
 
         // Extract the modifiers
@@ -200,16 +221,16 @@ class JavaKotlinDocExtractor : CliktCommand() {
         return if(packageName != null) "$packageName.${psiClass.name}" else psiClass.name ?: ""
     }
 
-    private fun getAstPosition(textRange: TextRange, project: Project, file: PsiFile): AstPosition {
+    private fun getAstPosition(text: String?, textRange: TextRange, project: Project, file: PsiFile): AstPosition {
         val document = PsiDocumentManager.getInstance(project).getDocument(file)
         val position = AstPosition()
         if (document != null) {
             val startOffset = textRange.startOffset
             val endOffset = textRange.endOffset
             position.startLine = document.getLineNumber(startOffset) + 1
-            position.startColumn = startOffset - document.getLineStartOffset(position.startLine - 1) + 1
             position.endLine = document.getLineNumber(endOffset) + 1
             position.endColumn = endOffset - document.getLineStartOffset(position.endLine - 1) + 1
+            position.startColumn = startOffset - document.getLineStartOffset(position.startLine - 1) + 1
         } else {
             // Handle the case where the document is null, maybe log an error or throw an exception
         }
@@ -243,7 +264,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
             fieldContext.hasTypeVariable = hasVariableTypeVariable(field)
 
             // Set the position
-            fieldContext.position = getAstPosition(field.textRange,psiClass.project,psiClass.containingFile)
+            fieldContext.position = getAstPosition(fieldName, field.nameIdentifier.textRange,psiClass.project,psiClass.containingFile)
 
             fieldContext.classOrInterfaceKey = classKey;
 
@@ -278,8 +299,13 @@ class JavaKotlinDocExtractor : CliktCommand() {
             //System.out.println("----------------");
             //System.out.println("methodContext.name: "+methodContext.name);
 
+            var nameRange = method.textRange
+            val nameTextRange = method.nameIdentifier?.textRange
+            if(nameTextRange!=null){
+                nameRange = nameTextRange
+            }
             // Set the position
-            methodContext.position = getAstPosition(method.textRange,psiClass.project,psiClass.containingFile)
+            methodContext.position = getAstPosition(method.name, nameRange,psiClass.project,psiClass.containingFile)
             methodContext.classOrInterfaceKey = classOrInterfaceKey
 
             // Extract the modifiers and check for @Override annotation
@@ -299,7 +325,12 @@ class JavaKotlinDocExtractor : CliktCommand() {
 
 
                 // Set the position
-                parameterContext.position = getAstPosition(parameter.textRange,psiClass.project,psiClass.containingFile)
+                var paramRange = parameter.textRange
+                val paramTextRange = parameter.nameIdentifier?.textRange
+                if(paramTextRange!=null){
+                    paramRange = paramTextRange
+                }
+                parameterContext.position = getAstPosition(parameter.name, paramRange,psiClass.project,psiClass.containingFile)
 
                 // Extract the modifiers
                 parameterContext.modifiers = getModifiers(parameter.modifierList)

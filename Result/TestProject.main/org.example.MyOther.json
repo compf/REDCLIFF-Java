@@ -1,0 +1,78 @@
+{
+  "modifiers": [
+    "public"
+  ],
+  "fields": {
+    "org.example.MyOther/memberField/zahl": {
+      "classOrInterfaceKey": "org.example.MyOther",
+      "modifiers": [
+        "public"
+      ],
+      "ignore": false,
+      "name": "zahl",
+      "key": "org.example.MyOther/memberField/zahl",
+      "type": "int",
+      "hasTypeVariable": false,
+      "position": {
+        "startLine": 5,
+        "startColumn": 16,
+        "endLine": 5,
+        "endColumn": 20
+      }
+    },
+    "org.example.MyOther/memberField/number": {
+      "classOrInterfaceKey": "org.example.MyOther",
+      "modifiers": [
+        "public"
+      ],
+      "ignore": false,
+      "name": "number",
+      "key": "org.example.MyOther/memberField/number",
+      "type": "int",
+      "hasTypeVariable": false,
+      "position": {
+        "startLine": 5,
+        "startColumn": 22,
+        "endLine": 5,
+        "endColumn": 28
+      }
+    },
+    "org.example.MyOther/memberField/kaese": {
+      "classOrInterfaceKey": "org.example.MyOther",
+      "modifiers": [
+        "public"
+      ],
+      "ignore": false,
+      "name": "kaese",
+      "key": "org.example.MyOther/memberField/kaese",
+      "type": "int",
+      "hasTypeVariable": false,
+      "position": {
+        "startLine": 5,
+        "startColumn": 30,
+        "endLine": 5,
+        "endColumn": 35
+      }
+    }
+  },
+  "methods": {},
+  "file_path": "/Users/nbaumgartner/Documents/GitHub/REDCLIFF-Java/TestProject/src/main/java/org/example/MyOther.java",
+  "anonymous": false,
+  "auxclass": false,
+  "implements_": [],
+  "extends_": [
+    "List"
+  ],
+  "innerDefinedClasses": {},
+  "innerDefinedInterfaces": {},
+  "name": "MyOther",
+  "key": "org.example.MyOther",
+  "type": "class",
+  "hasTypeVariable": false,
+  "position": {
+    "startLine": 3,
+    "startColumn": 14,
+    "endLine": 3,
+    "endColumn": 21
+  }
+}
