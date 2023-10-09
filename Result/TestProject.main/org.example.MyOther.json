@@ -17,7 +17,7 @@
           "name": "t",
           "key": "org.example.MyOther/method/add(T t)/parameter/t",
           "type": "T",
-          "hasTypeVariable": false,
+          "hasTypeVariable": true,
           "position": {
             "startLine": 7,
             "startColumn": 27,

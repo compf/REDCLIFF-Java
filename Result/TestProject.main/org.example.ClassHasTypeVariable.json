@@ -25,7 +25,7 @@
       "name": "e",
       "key": "org.example.ClassHasTypeVariable/memberField/e",
       "type": "E",
-      "hasTypeVariable": false,
+      "hasTypeVariable": true,
       "position": {
         "startLine": 7,
         "startColumn": 7,
@@ -40,7 +40,7 @@
       "name": "map3",
       "key": "org.example.ClassHasTypeVariable/memberField/map3",
       "type": "java.util.HashMap<java.lang.String,java.lang.String>",
-      "hasTypeVariable": true,
+      "hasTypeVariable": false,
       "position": {
         "startLine": 11,
         "startColumn": 29,
@@ -93,7 +93,7 @@
           "name": "t",
           "key": "org.example.ClassHasTypeVariable/method/add(T t)/parameter/t",
           "type": "T",
-          "hasTypeVariable": false,
+          "hasTypeVariable": true,
           "position": {
             "startLine": 13,
             "startColumn": 27,
@@ -127,7 +127,7 @@
           "name": "e",
           "key": "org.example.ClassHasTypeVariable/method/add2(E e)/parameter/e",
           "type": "E",
-          "hasTypeVariable": false,
+          "hasTypeVariable": true,
           "position": {
             "startLine": 15,
             "startColumn": 24,

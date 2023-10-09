@@ -11,6 +11,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.*
+import org.jetbrains.kotlin.idea.hierarchy.overrides.isOverrideHierarchyElement
 import org.jetbrains.research.pluginUtilities.openRepository.getKotlinJavaRepositoryOpener
 import org.jetbrains.research.refactoringDemoPlugin.parsedAstTypes.*
 import org.jetbrains.research.refactoringDemoPlugin.util.extractElementsOfType
@@ -103,37 +104,23 @@ class JavaKotlinDocExtractor : CliktCommand() {
     }
 
     private fun hasTypeVariable(type: PsiType): Boolean {
-        if(type is PsiTypeParameter){
-            return true
-        }
-        // get all type parameters like in List<T> ==> T or in Map<K,V> ==> K and V
-        // check for each type parameter if it is a type variable and for subtypes
+        var hasTypeVar = false
 
-        // If the type is a parameterized type, check its type arguments
-        if (type is PsiClassType) {
-            val resolve = type.resolve()
-            if (resolve is PsiClass) {
-                if(hasTypeVariable(resolve)){
-                    return true
+        type.accept(object : PsiTypeVisitor<Unit>() {
+            override fun visitType(type: PsiType) {
+                if (type is PsiClassType) {
+                    val resolve = type.resolve()
+                    if (resolve is PsiTypeParameter) {
+                        hasTypeVar = true
+                    }
+                    for (typeArg in type.parameters) {
+                        typeArg.accept(this)
+                    }
                 }
             }
-        }
+        })
 
-        // If the type is an array type, check its component type
-        if (type is PsiArrayType) {
-            return hasTypeVariable(type.componentType)
-        }
-
-        // If the type is a wildcard type, check its bound
-        if (type is PsiWildcardType) {
-            val bound = type.bound
-            if (bound != null) {
-                return hasTypeVariable(bound)
-            }
-        }
-
-        // If none of the above conditions are met, the type doesn't have a type variable
-        return false
+        return hasTypeVar
     }
 
     private fun extractClassesViaPsi(module: Module){
@@ -340,8 +327,8 @@ class JavaKotlinDocExtractor : CliktCommand() {
     }
 
     private fun hasVariableTypeVariable(variable: PsiVariable): Boolean {
-        // has variable a generic type in the type declaration?
-        return (variable.type as? PsiClassType)?.resolve()?.typeParameters?.isNotEmpty() ?: false
+        val type = variable.type
+        return hasTypeVariable(type)
     }
 
     private fun extractMethods(psiClass: PsiClass, classContext: ClassOrInterfaceTypeContext){
@@ -377,7 +364,16 @@ class JavaKotlinDocExtractor : CliktCommand() {
             methodContext.modifiers = getModifiers(method.modifierList)
 
 
-            methodContext.overrideAnnotation = method.hasAnnotation("Override")
+            methodContext.overrideAnnotation = method.hasAnnotation("Override") // quick way to check if method is overridden
+            // if method is overridden set overrideAnnotation to true
+            if(!methodContext.overrideAnnotation){
+                val superMethods = method.findSuperMethods()
+                if(superMethods.isNotEmpty()){
+                    methodContext.overrideAnnotation = true
+                }
+            }
+
+
 
             // Extract the parameters
             val parameters = method.parameterList.parameters
