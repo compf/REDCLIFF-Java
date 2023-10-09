@@ -1,7 +1,9 @@
 package org.example;
 
-public class MyOther extends List{
+import java.util.*;
+public class MyOther extends ArrayList{
 
-    public int zahl, number, kaese = 45;
+    // type variable example
+    public <T> void add(T t) {}
 
 }

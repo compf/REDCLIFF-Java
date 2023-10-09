@@ -1,0 +1,42 @@
+{
+  "modifiers": [
+    "public"
+  ],
+  "fields": {},
+  "methods": {
+    "org.example.ClassWithContructor/method/ClassWithContructor()": {
+      "modifiers": [
+        "public"
+      ],
+      "overrideAnnotation": false,
+      "parameters": [],
+      "classOrInterfaceKey": "org.example.ClassWithContructor",
+      "name": "ClassWithContructor",
+      "key": "org.example.ClassWithContructor/method/ClassWithContructor()",
+      "hasTypeVariable": false,
+      "position": {
+        "startLine": 5,
+        "startColumn": 12,
+        "endLine": 5,
+        "endColumn": 31
+      }
+    }
+  },
+  "file_path": "/Users/nbaumgartner/Documents/GitHub/REDCLIFF-Java/TestProject/src/main/java/org/example/ClassWithContructor.java",
+  "anonymous": false,
+  "auxclass": false,
+  "implements_": [],
+  "extends_": [],
+  "innerDefinedClasses": {},
+  "innerDefinedInterfaces": {},
+  "name": "ClassWithContructor",
+  "key": "org.example.ClassWithContructor",
+  "type": "class",
+  "hasTypeVariable": false,
+  "position": {
+    "startLine": 3,
+    "startColumn": 14,
+    "endLine": 3,
+    "endColumn": 33
+  }
+}

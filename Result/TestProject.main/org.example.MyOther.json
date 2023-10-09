@@ -2,66 +2,49 @@
   "modifiers": [
     "public"
   ],
-  "fields": {
-    "org.example.MyOther/memberField/zahl": {
-      "classOrInterfaceKey": "org.example.MyOther",
+  "fields": {},
+  "methods": {
+    "org.example.MyOther/method/add(T t)": {
       "modifiers": [
         "public"
       ],
-      "ignore": false,
-      "name": "zahl",
-      "key": "org.example.MyOther/memberField/zahl",
-      "type": "int",
-      "hasTypeVariable": false,
-      "position": {
-        "startLine": 5,
-        "startColumn": 16,
-        "endLine": 5,
-        "endColumn": 20
-      }
-    },
-    "org.example.MyOther/memberField/number": {
-      "classOrInterfaceKey": "org.example.MyOther",
-      "modifiers": [
-        "public"
+      "overrideAnnotation": false,
+      "parameters": [
+        {
+          "methodKey": "org.example.MyOther/method/add(T t)",
+          "modifiers": [],
+          "ignore": false,
+          "name": "t",
+          "key": "org.example.MyOther/method/add(T t)/parameter/t",
+          "type": "T",
+          "hasTypeVariable": false,
+          "position": {
+            "startLine": 7,
+            "startColumn": 27,
+            "endLine": 7,
+            "endColumn": 28
+          }
+        }
       ],
-      "ignore": false,
-      "name": "number",
-      "key": "org.example.MyOther/memberField/number",
-      "type": "int",
-      "hasTypeVariable": false,
-      "position": {
-        "startLine": 5,
-        "startColumn": 22,
-        "endLine": 5,
-        "endColumn": 28
-      }
-    },
-    "org.example.MyOther/memberField/kaese": {
       "classOrInterfaceKey": "org.example.MyOther",
-      "modifiers": [
-        "public"
-      ],
-      "ignore": false,
-      "name": "kaese",
-      "key": "org.example.MyOther/memberField/kaese",
-      "type": "int",
+      "name": "add",
+      "key": "org.example.MyOther/method/add(T t)",
+      "type": "void",
       "hasTypeVariable": false,
       "position": {
-        "startLine": 5,
-        "startColumn": 30,
-        "endLine": 5,
-        "endColumn": 35
+        "startLine": 7,
+        "startColumn": 21,
+        "endLine": 7,
+        "endColumn": 24
       }
     }
   },
-  "methods": {},
   "file_path": "/Users/nbaumgartner/Documents/GitHub/REDCLIFF-Java/TestProject/src/main/java/org/example/MyOther.java",
   "anonymous": false,
   "auxclass": false,
   "implements_": [],
   "extends_": [
-    "List"
+    "java.util.ArrayList"
   ],
   "innerDefinedClasses": {},
   "innerDefinedInterfaces": {},
@@ -70,9 +53,9 @@
   "type": "class",
   "hasTypeVariable": false,
   "position": {
-    "startLine": 3,
+    "startLine": 4,
     "startColumn": 14,
-    "endLine": 3,
+    "endLine": 4,
     "endColumn": 21
   }
 }

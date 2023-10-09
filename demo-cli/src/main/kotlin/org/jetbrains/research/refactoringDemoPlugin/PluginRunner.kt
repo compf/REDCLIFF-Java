@@ -11,9 +11,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.*
-import com.intellij.testFramework.HeavyPlatformTestCase.cleanupApplicationCaches
-import com.intellij.testFramework.common.cleanupApplicationCaches
-import com.intellij.util.indexing.FileBasedIndex
 import org.jetbrains.research.pluginUtilities.openRepository.getKotlinJavaRepositoryOpener
 import org.jetbrains.research.refactoringDemoPlugin.parsedAstTypes.*
 import org.jetbrains.research.refactoringDemoPlugin.util.extractElementsOfType
@@ -96,11 +93,60 @@ class JavaKotlinDocExtractor : CliktCommand() {
         folder.delete()
     }
 
+    private fun hasTypeVariable(psiClass: PsiClass): Boolean{
+        for (typeParameter in psiClass.typeParameters) {
+            if (typeParameter is PsiTypeParameter) { // TODO: always true?
+                return true
+            }
+        }
+        return false;
+    }
+
+    private fun hasTypeVariable(type: PsiType): Boolean {
+        if(type is PsiTypeParameter){
+            return true
+        }
+        // get all type parameters like in List<T> ==> T or in Map<K,V> ==> K and V
+        // check for each type parameter if it is a type variable and for subtypes
+
+        // If the type is a parameterized type, check its type arguments
+        if (type is PsiClassType) {
+            val resolve = type.resolve()
+            if (resolve is PsiClass) {
+                if(hasTypeVariable(resolve)){
+                    return true
+                }
+            }
+        }
+
+        // If the type is an array type, check its component type
+        if (type is PsiArrayType) {
+            return hasTypeVariable(type.componentType)
+        }
+
+        // If the type is a wildcard type, check its bound
+        if (type is PsiWildcardType) {
+            val bound = type.bound
+            if (bound != null) {
+                return hasTypeVariable(bound)
+            }
+        }
+
+        // If none of the above conditions are met, the type doesn't have a type variable
+        return false
+    }
+
     private fun extractClassesViaPsi(module: Module){
         val javaClasses = module.getPsiClasses("java")
 
         for(psiClass in javaClasses) {
             println("Processing (in module: "+module.name+") class: "+psiClass.name)
+            // check if psiClass is a genric like E from class MyList<E> then skip it
+            if(psiClass is PsiTypeParameter){
+                println("Skipping class: "+psiClass.name+" because it is a generic")
+                continue
+            }
+
             processClass(psiClass, module)
         }
         println("Done with module: "+module.name)
@@ -111,7 +157,6 @@ class JavaKotlinDocExtractor : CliktCommand() {
         val classContext = visitClassOrInterface(psiClass)
 
         println("Getting gson instance in class: "+psiClass.name)
-        val gson = GsonBuilder().setPrettyPrinting().create()
         //val it = DatasetItem(psiClass.name ?: "", "Hello", qualifiedName, superClasses)
 
         val fileName = module.name+"/"+classContext.key + ".json"
@@ -119,7 +164,20 @@ class JavaKotlinDocExtractor : CliktCommand() {
         println("Class file path: "+psiClass.containingFile.virtualFile.path);
         val outputFile = File("$output/"+fileName);
         outputFile.parentFile.mkdirs() // create parent directories if they do not exist
-        outputFile.writeText(gson.toJson(classContext))
+        val fileContent = objectToString(classContext)
+        outputFile.writeText(fileContent, Charsets.UTF_8)
+    }
+
+    private fun objectToString(classContext: ClassOrInterfaceTypeContext): String{
+        val gson = GsonBuilder().setPrettyPrinting().create()
+        var asJsonString = gson.toJson(classContext)
+        var fileContent = asJsonString;
+
+        fileContent = fileContent.replace("\\u003c", "<")
+        fileContent = fileContent.replace("\\u003e", ">")
+
+
+        return fileContent;
     }
 
     private fun visitClassOrInterface(psiClass: PsiClass): ClassOrInterfaceTypeContext{
@@ -183,7 +241,9 @@ class JavaKotlinDocExtractor : CliktCommand() {
             nameRange = nameTextRange
         }
 
-        classContext.position = getAstPosition(psiClass.name, nameRange,psiClass.project,psiClass.containingFile)
+        classContext.hasTypeVariable = hasTypeVariable(psiClass)
+
+        classContext.position = getAstPosition(nameRange,psiClass.project,psiClass.containingFile)
         classContext.anonymous = psiClass.name == null
 
         // Extract the modifiers
@@ -221,7 +281,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
         return if(packageName != null) "$packageName.${psiClass.name}" else psiClass.name ?: ""
     }
 
-    private fun getAstPosition(text: String?, textRange: TextRange, project: Project, file: PsiFile): AstPosition {
+    private fun getAstPosition(textRange: TextRange, project: Project, file: PsiFile): AstPosition {
         val document = PsiDocumentManager.getInstance(project).getDocument(file)
         val position = AstPosition()
         if (document != null) {
@@ -260,11 +320,12 @@ class JavaKotlinDocExtractor : CliktCommand() {
 
             fieldContext.type = field.type.canonicalText;
 
+
             //TODO check if this is correct
             fieldContext.hasTypeVariable = hasVariableTypeVariable(field)
 
             // Set the position
-            fieldContext.position = getAstPosition(fieldName, field.nameIdentifier.textRange,psiClass.project,psiClass.containingFile)
+            fieldContext.position = getAstPosition(field.nameIdentifier.textRange,psiClass.project,psiClass.containingFile)
 
             fieldContext.classOrInterfaceKey = classKey;
 
@@ -291,6 +352,10 @@ class JavaKotlinDocExtractor : CliktCommand() {
         // If you want to only get the fields of the top-level class and not any inner classes, you would need to add a check to exclude fields that belong to inner classes. One way to do this could be to check the parent of each field and see if it's the top-level class node.
         val methods = psiClass.methods
         for (method in methods) {
+            if(method.isConstructor){ // skip constructors
+                continue
+            }
+
             val methodContext = MethodTypeContext()
             // Set the properties of the methodContext based on the method
             methodContext.name = method.name
@@ -305,7 +370,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
                 nameRange = nameTextRange
             }
             // Set the position
-            methodContext.position = getAstPosition(method.name, nameRange,psiClass.project,psiClass.containingFile)
+            methodContext.position = getAstPosition(nameRange,psiClass.project,psiClass.containingFile)
             methodContext.classOrInterfaceKey = classOrInterfaceKey
 
             // Extract the modifiers and check for @Override annotation
@@ -330,7 +395,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
                 if(paramTextRange!=null){
                     paramRange = paramTextRange
                 }
-                parameterContext.position = getAstPosition(parameter.name, paramRange,psiClass.project,psiClass.containingFile)
+                parameterContext.position = getAstPosition(paramRange,psiClass.project,psiClass.containingFile)
 
                 // Extract the modifiers
                 parameterContext.modifiers = getModifiers(parameter.modifierList)
