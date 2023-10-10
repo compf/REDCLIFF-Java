@@ -11,7 +11,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.*
-import org.jetbrains.kotlin.idea.hierarchy.overrides.isOverrideHierarchyElement
 import org.jetbrains.research.pluginUtilities.openRepository.getKotlinJavaRepositoryOpener
 import org.jetbrains.research.refactoringDemoPlugin.parsedAstTypes.*
 import org.jetbrains.research.refactoringDemoPlugin.util.extractElementsOfType
@@ -38,6 +37,9 @@ class JavaKotlinDocExtractor : CliktCommand() {
     private val input by argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
     private val output by argument(help = "Output directory").file(canBeFile = true)
 
+    // Thread safe Map
+    private val visitedClasses = mutableMapOf<String, Boolean>()
+
     /**
      * Walks through files in the project, extracts all methods in each Java and Korlin file
      * and saves the method name and the corresponding JavaDoc to the output file.
@@ -62,21 +64,34 @@ class JavaKotlinDocExtractor : CliktCommand() {
         repositoryOpener.openProjectWithResolve(input.toPath()) { project ->
             ApplicationManager.getApplication().invokeAndWait {
                 val modules = project.extractModules()
-                for (module in modules) {
-                    println("Processing module: " + module.name)
-                    try {
-                        extractClassesViaPsi(module)
-                    } catch (e: Exception) {
-                        println("Error while processing module: " + module.name)
-                        println(e)
-                    }
-                }
+                parseAllModulesSourceCodeToAstClasses(modules)
+                parseAllModulesAuxClassesToAstClasses(modules)
             }
             true
         }
         println("Done")
 
         exitProcess(0)
+    }
+
+    private fun parseAllModulesAuxClassesToAstClasses(modules: List<Module>){
+        parseAllModulesToAstClasses(modules, false)
+    }
+
+    private fun parseAllModulesSourceCodeToAstClasses(modules: List<Module>){
+        parseAllModulesToAstClasses(modules, true)
+    }
+
+    private fun parseAllModulesToAstClasses(modules: List<Module>, onlySourceCode: Boolean){
+        for (module in modules) {
+            println("Processing module: " + module.name)
+            try {
+                parseModuleToAstClasses(module, onlySourceCode)
+            } catch (e: Exception) {
+                println("Error while processing module: " + module.name)
+                println(e)
+            }
+        }
     }
 
 
@@ -123,32 +138,82 @@ class JavaKotlinDocExtractor : CliktCommand() {
         return hasTypeVar
     }
 
-    private fun extractClassesViaPsi(module: Module){
+    private fun parseModuleToAstClasses(module: Module, onlySourceCode: Boolean){
         val javaClasses = module.getPsiClasses("java")
 
         for(psiClass in javaClasses) {
             println("Processing (in module: "+module.name+") class: "+psiClass.name)
             // check if psiClass is a genric like E from class MyList<E> then skip it
-            if(psiClass is PsiTypeParameter){
-                println("Skipping class: "+psiClass.name+" because it is a generic")
-                continue
-            }
 
-            processClass(psiClass, module)
+            if(onlySourceCode){ // Step 1. Parse all source code classes
+                val isSourceCode = true;
+                processClass(psiClass, module, isSourceCode)
+            } else { // Step 2. Parse all aux classes, since we have all source code classes already parsed
+                processSupersForClassAndInterfaces(psiClass, module)
+            }
         }
         println("Done with module: "+module.name)
     }
 
-    private fun processClass(psiClass: PsiClass, module: Module){
-        println("Processing class: "+psiClass.name)
-        val classContext = visitClassOrInterface(psiClass)
+    private fun processSupersForClassAndInterfaces(psiClass: PsiClass, module: Module){
+        println("Processing Aux class: "+psiClass.name+" in module: "+module.name)
+        // get all super classes and interfaces, since we have all source files already parsed
+        val supers = psiClass.supers
+        for(superClass in supers){
+            if(superClass is PsiClass){
+                processClass(superClass, module, false)
+                // also process their supers
+                processSupersForClassAndInterfaces(superClass, module)
+            }
+        }
 
-        println("Getting gson instance in class: "+psiClass.name)
-        //val it = DatasetItem(psiClass.name ?: "", "Hello", qualifiedName, superClasses)
+        // get all super interfaces
+        val superInterfaces = psiClass.interfaces
+        for(superInterface in superInterfaces){
+            if(superInterface is PsiClass){
+                processClass(superInterface, module, false)
+                // also process their supers
+                processSupersForClassAndInterfaces(superInterface, module)
+            }
+        }
+    }
 
-        val fileName = module.name+"/"+classContext.key + ".json"
-        println("Writing to file: "+fileName)
-        println("Class file path: "+psiClass.containingFile.virtualFile.path);
+    private fun processClass(psiClass: PsiClass, module: Module, isSourceCode: Boolean){
+        println("START Processing class: "+psiClass.name+" in module: "+module.name)
+
+        if(psiClass.name==="Object"){
+            println("-- Skipping class: "+psiClass.name+" because it is Object")
+            return;
+        }
+
+        if(psiClass is PsiTypeParameter){
+            println("-- Skipping class: "+psiClass.name+" because it is a generic")
+            return;
+        }
+
+        println("-- Check if class is already visited: "+psiClass.name+" in module: "+module.name)
+
+        val classContextKey = getClassOrInterfaceKey(psiClass)
+        val fileName = module.name+"/"+classContextKey + ".json"
+
+        // check if class is already visited
+        if(visitedClasses.containsKey(fileName)){
+            println("-- Skipping class: "+psiClass.name+" because it is already visited")
+            return;
+        } else {
+            visitedClasses[fileName] = true
+            println("-- class not visited yet: "+psiClass.name)
+        }
+
+        val classContext = visitClassOrInterface(psiClass, isSourceCode)
+        saveClassContextToFile(classContext, psiClass, fileName)
+    }
+
+    private fun saveClassContextToFile(classContext: ClassOrInterfaceTypeContext, psiClass: PsiClass, fileName: String){
+        println("-- Getting gson instance in class: "+psiClass.name)
+
+        println("-- Writing to file: "+fileName)
+        println("-- Class file path: "+psiClass.containingFile.virtualFile.path);
         val outputFile = File("$output/"+fileName);
         outputFile.parentFile.mkdirs() // create parent directories if they do not exist
         val fileContent = objectToString(classContext)
@@ -167,25 +232,25 @@ class JavaKotlinDocExtractor : CliktCommand() {
         return fileContent;
     }
 
-    private fun visitClassOrInterface(psiClass: PsiClass): ClassOrInterfaceTypeContext{
-        println("visitClassOrInterface: "+psiClass.name)
+    private fun visitClassOrInterface(psiClass: PsiClass, isSourceCode: Boolean): ClassOrInterfaceTypeContext{
+        println("-- visitClassOrInterface: "+psiClass.name)
 
-        println("Creating classContext")
+        println("-- Creating classContext")
         val classContext = ClassOrInterfaceTypeContext()
-        println("Created classContext")
+        println("-- Created classContext")
 
-        println("Extracting class informations")
-        extractClassInformations(psiClass,classContext)
+        println("-- Extracting class informations")
+        extractClassInformations(psiClass,classContext, isSourceCode)
 
         classContext.file_path = psiClass.containingFile.virtualFile.path
 
-        println("Extracting fields")
+        println("-- Extracting fields")
         extractFields(psiClass,classContext)
 
-        println("Extracting methods")
+        println("-- Extracting methods")
         extractMethods(psiClass,classContext)
 
-        println("Extracting extends and implements")
+        println("-- Extracting extends and implements")
         extractExtendsAndImplements(psiClass,classContext)
 
         /**
@@ -209,11 +274,11 @@ class JavaKotlinDocExtractor : CliktCommand() {
             classContext.definedInClassOrInterfaceTypeKey = outClassKey
         }
 
-        println("Done with visitClassOrInterface: "+psiClass.name)
+        println("-- Done with visitClassOrInterface: "+psiClass.name)
         return classContext
     }
 
-    private fun extractClassInformations(psiClass: PsiClass,classContext: ClassOrInterfaceTypeContext){
+    private fun extractClassInformations(psiClass: PsiClass,classContext: ClassOrInterfaceTypeContext, isSourceCode: Boolean){
         classContext.name = psiClass.name ?: ""
         classContext.key = getClassOrInterfaceKey(psiClass)
         val isInterface = psiClass.isInterface
@@ -229,6 +294,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
         }
 
         classContext.hasTypeVariable = hasTypeVariable(psiClass)
+        classContext.auxclass = !isSourceCode // if class is not source code, it is an aux class
 
         classContext.position = getAstPosition(nameRange,psiClass.project,psiClass.containingFile)
         classContext.anonymous = psiClass.name == null
@@ -288,16 +354,14 @@ class JavaKotlinDocExtractor : CliktCommand() {
         val classKey = getClassOrInterfaceKey(psiClass)
         val memberFieldKeyPre = classKey + "/memberField/"
 
-        println("Extracting fields for class: "+classKey)
-        println("psiClass.fields.size: "+psiClass.fields.size);
-        println("all fields size: "+psiClass.allFields.size)
+        println("-- Extracting fields for class: "+classKey)
         val fields = psiClass.fields
         for(field in fields){
-            println("-- field: "+field.name)
-            println("---- field.text: "+field.text)
-            println("---- field.textRange: "+field.textRange)
-            println("---- field.type: "+field.type)
-            println("---- field.type.canonicalText: "+field.type.canonicalText)
+            println("---- field: "+field.name)
+            println("------ field.text: "+field.text)
+            println("------ field.textRange: "+field.textRange)
+            println("------ field.type: "+field.type)
+            println("------ field.type.canonicalText: "+field.type.canonicalText)
 
             val fieldContext = MemberFieldParameterTypeContext()
 

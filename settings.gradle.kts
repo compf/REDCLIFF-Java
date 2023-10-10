@@ -1,4 +1,4 @@
-rootProject.name = "refactoring-workshop-demo"
+rootProject.name = "REDCLIFF-Java"
 
 include(
     "demo-plugin",
