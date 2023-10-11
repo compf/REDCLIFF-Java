@@ -16,6 +16,6 @@ class ClassOrInterfaceTypeContext : AstElementTypeContext() {
     var innerDefinedInterfaces: HashMap<String, ClassOrInterfaceTypeContext> = HashMap()
 
     init {
-        println("ClassOrInterfaceTypeContext constructor called")
+        //println("ClassOrInterfaceTypeContext constructor called")
     }
 }

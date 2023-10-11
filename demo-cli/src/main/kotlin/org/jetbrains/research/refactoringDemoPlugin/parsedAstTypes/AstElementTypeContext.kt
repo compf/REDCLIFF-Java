@@ -9,6 +9,6 @@ open class AstElementTypeContext {
     var position: AstPosition? = null
 
     init {
-        println("AstElementTypeContext constructor called")
+        //println("AstElementTypeContext constructor called")
     }
 }
