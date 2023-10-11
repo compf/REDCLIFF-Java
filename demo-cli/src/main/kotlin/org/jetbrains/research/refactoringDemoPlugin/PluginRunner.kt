@@ -309,7 +309,8 @@ class JavaKotlinDocExtractor : CliktCommand() {
         if (implementsLists != null) {
             val superinterfaces = implementsLists.referenceElements
             for (superinterface in superinterfaces) {
-                val fullQualifiedName: String = superinterface.qualifiedName
+                val psiSuperInterface: PsiClass = superinterface.resolve() as PsiClass
+                val fullQualifiedName: String = getClassOrInterfaceKey(psiSuperInterface)
                 if (fullQualifiedName != null) {
                     classContext.implements_.add(fullQualifiedName)
                 }
@@ -321,7 +322,8 @@ class JavaKotlinDocExtractor : CliktCommand() {
         if (extendsLists != null) {
             val superclasses = extendsLists.referenceElements
             for (superclass in superclasses) {
-                val fullQualifiedName: String = superclass.qualifiedName
+                val psiSuperClass: PsiClass = superclass.resolve() as PsiClass
+                val fullQualifiedName: String = getClassOrInterfaceKey(psiSuperClass)
                 if (fullQualifiedName != null) {
                     classContext.extends_.add(fullQualifiedName)
                 }
