@@ -138,11 +138,18 @@ class JavaKotlinDocExtractor : CliktCommand() {
         return hasTypeVar
     }
 
+    private fun log(psiClass: PsiClass, message: String){
+        val debug = psiClass.name.equals("Caffeine")
+        if(debug){
+            println("LOG: "+psiClass.name+": "+message)
+        }
+    }
+
     private fun parseModuleToAstClasses(module: Module, onlySourceCode: Boolean){
         val javaClasses = module.getPsiClasses("java")
 
         for(psiClass in javaClasses) {
-            println("Processing (in module: "+module.name+") class: "+psiClass.name)
+            log(psiClass,"Processing (in module: "+module.name+") class: "+psiClass.name)
             // check if psiClass is a genric like E from class MyList<E> then skip it
 
             if(onlySourceCode){ // Step 1. Parse all source code classes
@@ -156,7 +163,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
     }
 
     private fun processSupersForClassAndInterfaces(psiClass: PsiClass, module: Module){
-        println("Processing Aux class: "+psiClass.name+" in module: "+module.name)
+        //println("Processing Aux class: "+psiClass.name+" in module: "+module.name)
         // get all super classes and interfaces, since we have all source files already parsed
         val supers = psiClass.supers
         for(superClass in supers){
@@ -179,30 +186,34 @@ class JavaKotlinDocExtractor : CliktCommand() {
     }
 
     private fun processClass(psiClass: PsiClass, module: Module, isSourceCode: Boolean){
-        println("START Processing class: "+psiClass.name+" in module: "+module.name)
+        val debug = psiClass.name.equals("Caffeine")
 
-        if(psiClass.name==="Object"){
-            println("-- Skipping class: "+psiClass.name+" because it is Object")
+        log(psiClass,"START Processing class: "+psiClass.name+" in module: "+module.name)
+
+        val classContextKey = getClassOrInterfaceKey(psiClass)
+
+        if(classContextKey.equals("java.lang.Object")){
+            log(psiClass,"-- Skipping class: "+psiClass.name+" because it is Object")
             return;
         }
 
         if(psiClass is PsiTypeParameter){
-            println("-- Skipping class: "+psiClass.name+" because it is a generic")
+            log(psiClass,"-- Skipping class: "+psiClass.name+" because it is a generic")
             return;
         }
 
-        println("-- Check if class is already visited: "+psiClass.name+" in module: "+module.name)
+        log(psiClass,"-- Check if class is already visited: " + psiClass.name + " in module: " + module.name)
 
-        val classContextKey = getClassOrInterfaceKey(psiClass)
+        //val classContextKey = getClassOrInterfaceKey(psiClass)
         val fileName = module.name+"/"+classContextKey + ".json"
 
         // check if class is already visited
         if(visitedClasses.containsKey(fileName)){
-            println("-- Skipping class: "+psiClass.name+" because it is already visited")
+            log(psiClass,"-- Skipping class: " + psiClass.name + " because it is already visited")
             return;
         } else {
             visitedClasses[fileName] = true
-            println("-- class not visited yet: "+psiClass.name)
+            log(psiClass,"-- class not visited yet: " + psiClass.name)
         }
 
         val classContext = visitClassOrInterface(psiClass, isSourceCode)
@@ -210,10 +221,10 @@ class JavaKotlinDocExtractor : CliktCommand() {
     }
 
     private fun saveClassContextToFile(classContext: ClassOrInterfaceTypeContext, psiClass: PsiClass, fileName: String){
-        println("-- Getting gson instance in class: "+psiClass.name)
+        log(psiClass,"-- Getting gson instance in class: "+psiClass.name)
 
-        println("-- Writing to file: "+fileName)
-        println("-- Class file path: "+psiClass.containingFile.virtualFile.path);
+        log(psiClass,"-- Writing to file: "+fileName)
+        log(psiClass,"-- Class file path: "+psiClass.containingFile.virtualFile.path);
         val outputFile = File("$output/"+fileName);
         outputFile.parentFile.mkdirs() // create parent directories if they do not exist
         val fileContent = objectToString(classContext)
@@ -233,24 +244,24 @@ class JavaKotlinDocExtractor : CliktCommand() {
     }
 
     private fun visitClassOrInterface(psiClass: PsiClass, isSourceCode: Boolean): ClassOrInterfaceTypeContext{
-        println("-- visitClassOrInterface: "+psiClass.name)
+        log(psiClass,"-- visitClassOrInterface: "+psiClass.name)
 
-        println("-- Creating classContext")
+        log(psiClass,"-- Creating classContext")
         val classContext = ClassOrInterfaceTypeContext()
-        println("-- Created classContext")
+        log(psiClass,"-- Created classContext")
 
-        println("-- Extracting class informations")
+        log(psiClass,"-- Extracting class informations")
         extractClassInformations(psiClass,classContext, isSourceCode)
 
         classContext.file_path = psiClass.containingFile.virtualFile.path
 
-        println("-- Extracting fields")
+        log(psiClass,"-- Extracting fields")
         extractFields(psiClass,classContext)
 
-        println("-- Extracting methods")
+        log(psiClass,"-- Extracting methods")
         extractMethods(psiClass,classContext)
 
-        println("-- Extracting extends and implements")
+        log(psiClass,"-- Extracting extends and implements")
         extractExtendsAndImplements(psiClass,classContext)
 
         /**
@@ -274,7 +285,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
             classContext.definedInClassOrInterfaceTypeKey = outClassKey
         }
 
-        println("-- Done with visitClassOrInterface: "+psiClass.name)
+        log(psiClass,"-- Done with visitClassOrInterface: "+psiClass.name)
         return classContext
     }
 
@@ -296,7 +307,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
         classContext.hasTypeVariable = hasTypeVariable(psiClass)
         classContext.auxclass = !isSourceCode // if class is not source code, it is an aux class
 
-        classContext.position = getAstPosition(nameRange,psiClass.project,psiClass.containingFile)
+        classContext.position = getAstPosition("extractClass",nameRange,psiClass.project,psiClass.containingFile)
         classContext.anonymous = psiClass.name == null
 
         // Extract the modifiers
@@ -336,18 +347,24 @@ class JavaKotlinDocExtractor : CliktCommand() {
         return if(packageName != null) "$packageName.${psiClass.name}" else psiClass.name ?: ""
     }
 
-    private fun getAstPosition(textRange: TextRange, project: Project, file: PsiFile): AstPosition {
+    private fun getAstPosition(logMessage: String, textRangeOptional: TextRange?, project: Project, file: PsiFile): AstPosition {
         val document = PsiDocumentManager.getInstance(project).getDocument(file)
         val position = AstPosition()
-        if (document != null) {
-            val startOffset = textRange.startOffset
-            val endOffset = textRange.endOffset
-            position.startLine = document.getLineNumber(startOffset) + 1
-            position.endLine = document.getLineNumber(endOffset) + 1
-            position.endColumn = endOffset - document.getLineStartOffset(position.endLine - 1) + 1
-            position.startColumn = startOffset - document.getLineStartOffset(position.startLine - 1) + 1
-        } else {
-            // Handle the case where the document is null, maybe log an error or throw an exception
+        try{
+            if (document != null && textRangeOptional != null) {
+                val textRange: TextRange = textRangeOptional
+                val startOffset = textRange.startOffset
+                val endOffset = textRange.endOffset
+                position.startLine = document.getLineNumber(startOffset) + 1
+                position.endLine = document.getLineNumber(endOffset) + 1
+                position.endColumn = endOffset - document.getLineStartOffset(position.endLine - 1) + 1
+                position.startColumn = startOffset - document.getLineStartOffset(position.startLine - 1) + 1
+            } else {
+                // Handle the case where the document is null, maybe log an error or throw an exception
+            }
+        } catch (e: Exception){
+            println("Error while getting position for: "+logMessage)
+            println(e)
         }
         return position
     }
@@ -356,14 +373,15 @@ class JavaKotlinDocExtractor : CliktCommand() {
         val classKey = getClassOrInterfaceKey(psiClass)
         val memberFieldKeyPre = classKey + "/memberField/"
 
-        println("-- Extracting fields for class: "+classKey)
+        log(psiClass,"-- Extracting fields for class: "+classKey)
         val fields = psiClass.fields
         for(field in fields){
-            println("---- field: "+field.name)
-            println("------ field.text: "+field.text)
-            println("------ field.textRange: "+field.textRange)
-            println("------ field.type: "+field.type)
-            println("------ field.type.canonicalText: "+field.type.canonicalText)
+
+            log(psiClass,"---- field: "+field.name)
+            log(psiClass,"------ field.text: "+field.text)
+            log(psiClass,"------ field.textRange: "+field.textRange)
+            log(psiClass,"------ field.type: "+field.type)
+            log(psiClass,"------ field.type.canonicalText: "+field.type.canonicalText)
 
             val fieldContext = MemberFieldParameterTypeContext()
 
@@ -378,7 +396,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
             fieldContext.hasTypeVariable = hasVariableTypeVariable(field)
 
             // Set the position
-            fieldContext.position = getAstPosition(field.nameIdentifier.textRange,psiClass.project,psiClass.containingFile)
+            fieldContext.position = getAstPosition("extractField",field.nameIdentifier.textRange,psiClass.project,psiClass.containingFile)
 
             fieldContext.classOrInterfaceKey = classKey;
 
@@ -423,7 +441,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
                 nameRange = nameTextRange
             }
             // Set the position
-            methodContext.position = getAstPosition(nameRange,psiClass.project,psiClass.containingFile)
+            methodContext.position = getAstPosition("extractMethod",nameRange,psiClass.project,psiClass.containingFile)
             methodContext.classOrInterfaceKey = classOrInterfaceKey
 
             // Extract the modifiers and check for @Override annotation
@@ -457,7 +475,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
                 if(paramTextRange!=null){
                     paramRange = paramTextRange
                 }
-                parameterContext.position = getAstPosition(paramRange,psiClass.project,psiClass.containingFile)
+                parameterContext.position = getAstPosition("extractParameter",paramRange,psiClass.project,psiClass.containingFile)
 
                 // Extract the modifiers
                 parameterContext.modifiers = getModifiers(parameter.modifierList)
