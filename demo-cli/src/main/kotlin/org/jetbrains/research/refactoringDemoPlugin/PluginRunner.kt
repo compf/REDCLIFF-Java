@@ -4,6 +4,9 @@ import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.types.file
 import com.google.gson.GsonBuilder
+import com.google.gson.Gson
+import com.intellij.ide.fileTemplates.FileTemplateManager
+import com.intellij.ide.fileTemplates.FileTemplateUtil
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ApplicationStarter
 import com.intellij.openapi.module.Module
@@ -11,6 +14,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.*
+import com.intellij.openapi.vfs.VirtualFileManager
 import org.jetbrains.research.pluginUtilities.openRepository.getKotlinJavaRepositoryOpener
 import org.jetbrains.research.refactoringDemoPlugin.parsedAstTypes.*
 import org.jetbrains.research.refactoringDemoPlugin.util.extractElementsOfType
@@ -26,13 +30,65 @@ object PluginRunner : ApplicationStarter {
         get() = "DemoPluginCLI"
 
     override val requiredModality: Int
-        get() = ApplicationStarter.NOT_IN_EDT
+        get() = ApplicationStarter.ANY_MODALITY
 
     override fun main(args: List<String>) {
-        JavaKotlinDocExtractor().main(args.drop(1))
+        DataClumpRefactorer().main(args.drop(1))
     }
 }
+class DataClumpRefactorer: CliktCommand(){
+    private val input by argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
+    private val output by argument(help = "Output directory").file(canBeFile = true)
+    fun calculateOffset(text: CharSequence, lineNumber: Int, columnNumber: Int): Int {
+        var offset = 0
+        val lines = text.split('\n')
+        
+        for (i in 0 until lineNumber - 1) {
+            offset += lines[i].length + 1 // Add 1 for the newline character
+        }
+    
+        return offset + columnNumber - 1
+    }
+    fun createExtractedClass(project:Project,className:String, file:PsiFile){
+        ApplicationManager.getApplication().runWriteAction {
+            println("Creating class")
+            try {
+                JavaDirectoryService.getInstance().createClass(file.containingDirectory, className);
 
+            }catch (ex:Exception){
+                println("ERROR "+ex.message)
+            }
+
+        }
+
+    }
+
+    override fun run(){
+        val projectManager = ProjectManager.getInstance()
+        val project = projectManager.loadAndOpenProject(input.toPath().toString())!!
+        createExtractedClass(project,"Hallo",PsiManager.getInstance(project).findFile(VirtualFileManager.getInstance().findFileByUrl("file:///home/compf/data/uni/master/sem4/data_clump_solver/javaTest/src/main/java/javatest/MathStuff.java")!!)!!)
+        while (true){
+            println("Please INPUT!!!!")
+            val my_input= readLine()!!
+            val json=Gson().fromJson(my_input,Map::class.java)
+            val splitted=my_input?.split("\t\t")!!
+            val filePath=splitted[0]
+            val lineNumber=splitted[1].toInt()
+            val columnNumber=splitted[2].toInt()
+            val psiFile = PsiManager.getInstance(project).findFile(VirtualFileManager.getInstance().findFileByUrl("file://$filePath")!!)!!
+            psiFile.let {
+                val offset = calculateOffset(it.text, lineNumber, columnNumber)
+
+                val element=it.findElementAt(offset)
+                print(element.toString())
+            }
+           
+           
+        }
+        
+
+    }
+}
 class JavaKotlinDocExtractor : CliktCommand() {
     private val input by argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
     private val output by argument(help = "Output directory").file(canBeFile = true)
