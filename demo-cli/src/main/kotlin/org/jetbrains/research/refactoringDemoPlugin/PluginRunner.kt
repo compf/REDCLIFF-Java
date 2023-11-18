@@ -7,14 +7,17 @@ import com.google.gson.GsonBuilder
 import com.google.gson.Gson
 import com.intellij.ide.fileTemplates.FileTemplateManager
 import com.intellij.ide.fileTemplates.FileTemplateUtil
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ApplicationStarter
+import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.*
 import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.psi.search.GlobalSearchScope
+import com.jetbrains.rd.util.remove
+import org.jetbrains.kotlin.lombok.utils.decapitalize
 import org.jetbrains.research.pluginUtilities.openRepository.getKotlinJavaRepositoryOpener
 import org.jetbrains.research.refactoringDemoPlugin.parsedAstTypes.*
 import org.jetbrains.research.refactoringDemoPlugin.util.extractElementsOfType
@@ -23,7 +26,8 @@ import org.jetbrains.research.refactoringDemoPlugin.util.findPsiFilesByExtension
 import java.io.File
 import kotlin.system.exitProcess
 
-
+import com.intellij.compiler.server.BuildManager
+import com.intellij.openapi.application.ApplicationManager
 object PluginRunner : ApplicationStarter {
     @Deprecated("Specify it as `id` for extension definition in a plugin descriptor")
     override val commandName: String
@@ -49,25 +53,97 @@ class DataClumpRefactorer: CliktCommand(){
     
         return offset + columnNumber - 1
     }
-    fun createExtractedClass(project:Project,className:String, file:PsiFile){
-        ApplicationManager.getApplication().runWriteAction {
-            println("Creating class")
-            try {
-                JavaDirectoryService.getInstance().createClass(file.containingDirectory, className);
-
-            }catch (ex:Exception){
-                println("ERROR "+ex.message)
-            }
-
+    fun createExtractedClass(project:Project,className:String, file:PsiFile):PsiClass?{
+        println("### Creating class")
+        val oldFile=file.containingDirectory.getVirtualFile().findChild(className+".java")
+        if(oldFile!=null){
+            oldFile.delete(this);
+          
         }
+        val paramMap=mutableMapOf<String,String>()
+        paramMap.put("PACKAGE_NAME","javatest")
+                val result= JavaDirectoryService.getInstance().createClass(file.containingDirectory, className,com.intellij.ide.fileTemplates.JavaTemplateUtil.INTERNAL_CLASS_TEMPLATE_NAME,false,paramMap)
+               
+                println("### finnished class")
+                return result
 
     }
 
+
+
+    fun refactorDataClumpContainingMethod(project:Project,method:PsiMethod,extractedClass: PsiClass,context:DataClumpTypeContext){
+        
+        com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction(project){
+            println("### Start refactor method")
+            val relevantParameters=context.data_clump_data.values.map{it.name}.toSet()
+            for(param in method.parameterList.parameters){
+                println(param.name)
+                if(param.name in relevantParameters){
+    
+                    param.delete()
+                }
+            }
+            println("### modify method")
+            val type=JavaPsiFacade.getInstance(project).getElementFactory().createType(extractedClass)
+            val psiParam=PsiElementFactory.getInstance(project).createParameter(extractedClass.name!!.decapitalize(),type)
+            method.parameterList.add(psiParam)
+            println("### modify method finnished")
+            println(method.isValid())
+            println(method.text)
+            val doc=PsiDocumentManager.getInstance(project).getDocument(method.containingFile)!!
+            com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveDocument(doc)
+            
+        }
+       
+
+
+    }
+    val testJSON="{'type':'data_clump','key':'parameters_to_parameters_data_clump-lib/src/main/java/javatest/MathStuff.java-javatest.MathStuff/method/printLength(int x, int y, int z)-javatest.MathStuff/method/printMax(int x, int y, int z)-xyz','probability':1,'from_file_path':'src/main/java/javatest/MathStuff.java','from_class_or_interface_name':'MathStuff','from_class_or_interface_key':'javatest.MathStuff','from_method_name':'printLength','from_method_key':'javatest.MathStuff/method/printLength(int x, int y, int z)','to_file_path':'javaTest/src/main/java/javatest/MathStuff.java','to_class_or_interface_name':'MathStuff','to_class_or_interface_key':'javatest.MathStuff','to_method_name':'printMax','to_method_key':'javatest.MathStuff/method/printMax(int x, int y, int z)','data_clump_type':'parameters_to_parameters_data_clump','data_clump_data':{'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x','name':'x','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/x','name':'x','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':30,'endLine':13,'endColumn':31}},'position':{'startLine':5,'startColumn':33,'endLine':5,'endColumn':34}},'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y','name':'y','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/y','name':'y','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':37,'endLine':13,'endColumn':38}},'position':{'startLine':5,'startColumn':40,'endLine':5,'endColumn':41}},'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z','name':'z','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/z','name':'z','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':44,'endLine':13,'endColumn':45}},'position':{'startLine':5,'startColumn':47,'endLine':5,'endColumn':48}}}}"
     override fun run(){
+       
+        VirtualFileManager.getInstance().syncRefresh();
         val projectManager = ProjectManager.getInstance()
         val project = projectManager.loadAndOpenProject(input.toPath().toString())!!
-        createExtractedClass(project,"Hallo",PsiManager.getInstance(project).findFile(VirtualFileManager.getInstance().findFileByUrl("file:///home/compf/data/uni/master/sem4/data_clump_solver/javaTest/src/main/java/javatest/MathStuff.java")!!)!!)
-        while (true){
+        PsiManager.getInstance(project).dropPsiCaches()
+        val context=Gson().fromJson<DataClumpTypeContext>(testJSON,DataClumpTypeContext::class.java)
+        println("test")
+        var fromFilePath=""
+        try{
+        fromFilePath=java.nio.file.Paths.get(input.toPath().toString(),context.from_file_path).toString()
+        }
+        catch (e:Exception){
+            println("Error while closing project")
+            println(e)
+        }
+        println(fromFilePath.toString())
+        try{
+            val url="file://"+fromFilePath.toString()
+            println(url)
+            val extractedClassName="Point"
+            val man=VirtualFileManager.getInstance()
+            println(man)
+            val vFile=man.findFileByUrl(url)!!
+            val dataClumpFile=PsiManager.getInstance(project).findFile(vFile)!!
+            
+            val extractedClass= createExtractedClass(project,extractedClassName,dataClumpFile)!!
+            println(dataClumpFile.getChildren().size)
+            val dataClumpClass=(dataClumpFile as PsiClassOwner).classes.filter{it.name==context.from_class_or_interface_name}.first()
+         println("### Lets go on: "+context.from_method_name)
+           val allMethods= dataClumpClass!!.findMethodsByName(context.from_method_name,false)
+           println(allMethods.size)
+           val method=allMethods.first()
+            println("### ethod found")
+            refactorDataClumpContainingMethod(project,method,extractedClass,context)
+            dataClumpFile.clearCaches()
+        }
+        catch(ex:Exception){
+            println("ERROR")
+            ex.printStackTrace()
+           
+        }
+       
+       
+        /*while (true){
             println("Please INPUT!!!!")
             val my_input= readLine()!!
             val json=Gson().fromJson(my_input,Map::class.java)
@@ -84,7 +160,9 @@ class DataClumpRefactorer: CliktCommand(){
             }
            
            
-        }
+        }*/
+        PsiDocumentManager.getInstance(project).commitAllDocuments()
+        exitProcess(0)
         
 
     }
