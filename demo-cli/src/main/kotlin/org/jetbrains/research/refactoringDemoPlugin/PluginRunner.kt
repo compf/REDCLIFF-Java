@@ -21,6 +21,10 @@ import org.jetbrains.research.refactoringDemoPlugin.parsedAstTypes.*
 import org.jetbrains.research.refactoringDemoPlugin.util.extractElementsOfType
 import org.jetbrains.research.refactoringDemoPlugin.util.extractModules
 import org.jetbrains.research.refactoringDemoPlugin.util.findPsiFilesByExtension
+import com.intellij.refactoring.introduceParameterObject.*
+import  com.intellij.refactoring.changeSignature.ParameterInfoImpl;
+import com.intellij.refactoring.JavaRefactoringFactory;
+import com.intellij.openapi.roots.ProjectFileIndex
 
 object PluginRunner : ApplicationStarter {
     @Deprecated("Specify it as `id` for extension definition in a plugin descriptor")
@@ -37,7 +41,7 @@ object PluginRunner : ApplicationStarter {
 
 class DataClumpRefactorer : CliktCommand() {
     private val input by
-            argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
+    argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
     private val output by argument(help = "Output directory").file(canBeFile = true)
     fun calculateOffset(text: CharSequence, lineNumber: Int, columnNumber: Int): Int {
         var offset = 0
@@ -49,6 +53,7 @@ class DataClumpRefactorer : CliktCommand() {
 
         return offset + columnNumber - 1
     }
+
     fun createExtractedClass(project: Project, className: String, file: PsiFile): PsiClass? {
         println("### Creating class")
         val oldFile = file.containingDirectory.getVirtualFile().findChild(className + ".java")
@@ -58,28 +63,107 @@ class DataClumpRefactorer : CliktCommand() {
         val paramMap = mutableMapOf<String, String>()
         paramMap.put("PACKAGE_NAME", "javatest")
         val result =
-                JavaDirectoryService.getInstance()
-                        .createClass(
-                                file.containingDirectory,
-                                className,
-                                com.intellij
-                                        .ide
-                                        .fileTemplates
-                                        .JavaTemplateUtil
-                                        .INTERNAL_CLASS_TEMPLATE_NAME,
-                                false,
-                                paramMap
-                        )
+            JavaDirectoryService.getInstance()
+                .createClass(
+                    file.containingDirectory,
+                    className,
+                    com.intellij
+                        .ide
+                        .fileTemplates
+                        .JavaTemplateUtil
+                        .INTERNAL_CLASS_TEMPLATE_NAME,
+                    false,
+                    paramMap
+                )
 
         println("### finnished class")
         return result
     }
 
+    fun getURI(path: String): String? {
+        try {
+            return "file://" + java.nio.file.Paths.get(input.toPath().toString(), path).toString()
+        } catch (e: Exception) {
+            println("Error while creating path")
+            println(e)
+            return null
+        }
+    }
+
+    fun getPackageName(file: PsiFile): String {
+        return "javatest";
+    }
+
+    class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?) {}
+
+    fun introduceParameterObject(project: Project, context: DataClumpTypeContext, suggestedClassName: String) {
+
+        val man = VirtualFileManager.getInstance()
+        val endpoints = arrayOf(
+            DataClumpEndpoint(
+                getURI(context.from_file_path)!!,
+                context.from_class_or_interface_name,
+                context.from_method_name!!
+            ),
+            DataClumpEndpoint(
+                getURI(context.to_file_path)!!,
+                context.to_class_or_interface_name,
+                context.to_method_name!!
+            )
+        )
+        val relevantParameters = context.data_clump_data.values.map { it.name }.toSet()
+        for (ep in endpoints) {
+
+
+            val vFile = man.findFileByUrl(ep.filePath)!!
+            val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
+            val packageName = getPackageName(dataClumpFile)
+            val dataClumpClass =
+                (dataClumpFile as PsiClassOwner)
+                    .classes
+                    .filter { it.name == ep.className }
+                    .first()
+            val allMethods = dataClumpClass!!.findMethodsByName(ep.methodName!!, false)
+            val method = allMethods[0]
+            var index = 0;
+            val parameterInfos = mutableListOf<ParameterInfoImpl>()
+            for (param in method.parameterList.parameters) {
+                println(param.name)
+                if (param.name in relevantParameters) {
+                    parameterInfos.add(ParameterInfoImpl(index, param.name!!, param.type))
+                    index++
+
+                }
+            }
+
+            val moveDestination =
+                JavaRefactoringFactory.getInstance(project).createSourceFolderPreservingMoveDestination(packageName)
+            val descriptor =
+                com.intellij.refactoring.introduceparameterobject.JavaIntroduceParameterObjectClassDescriptor(
+                    suggestedClassName,
+                    packageName,
+                    moveDestination,
+                    false,
+                    false,
+                    "public",
+                    parameterInfos.toTypedArray(),
+                    method,
+                    true
+                )
+            descriptor.existingClass=dataClumpClass
+            val processor = IntroduceParameterObjectProcessor(allMethods[0], descriptor, parameterInfos, false)
+            processor.run()
+        }
+
+
+    }
+
+
     fun refactorDataClumpContainingMethod(
-            project: Project,
-            method: PsiMethod,
-            extractedClass: PsiClass,
-            context: DataClumpTypeContext
+        project: Project,
+        method: PsiMethod,
+        extractedClass: PsiClass,
+        context: DataClumpTypeContext
     ) {
 
         com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction(project) {
@@ -94,12 +178,12 @@ class DataClumpRefactorer : CliktCommand() {
             }
             println("### modify method")
             val type =
-                    JavaPsiFacade.getInstance(project)
-                            .getElementFactory()
-                            .createType(extractedClass)
+                JavaPsiFacade.getInstance(project)
+                    .getElementFactory()
+                    .createType(extractedClass)
             val psiParam =
-                    PsiElementFactory.getInstance(project)
-                            .createParameter(extractedClass.name!!.decapitalize(), type)
+                PsiElementFactory.getInstance(project)
+                    .createParameter(extractedClass.name!!.decapitalize(), type)
             method.parameterList.add(psiParam)
             println("### modify method finnished")
             println(method.isValid())
@@ -108,8 +192,10 @@ class DataClumpRefactorer : CliktCommand() {
             com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveDocument(doc)
         }
     }
+
     val testJSON =
-            "{'type':'data_clump','key':'parameters_to_parameters_data_clump-lib/src/main/java/javatest/MathStuff.java-javatest.MathStuff/method/printLength(int x, int y, int z)-javatest.MathStuff/method/printMax(int x, int y, int z)-xyz','probability':1,'from_file_path':'src/main/java/javatest/MathStuff.java','from_class_or_interface_name':'MathStuff','from_class_or_interface_key':'javatest.MathStuff','from_method_name':'printLength','from_method_key':'javatest.MathStuff/method/printLength(int x, int y, int z)','to_file_path':'javaTest/src/main/java/javatest/MathStuff.java','to_class_or_interface_name':'MathStuff','to_class_or_interface_key':'javatest.MathStuff','to_method_name':'printMax','to_method_key':'javatest.MathStuff/method/printMax(int x, int y, int z)','data_clump_type':'parameters_to_parameters_data_clump','data_clump_data':{'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x','name':'x','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/x','name':'x','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':30,'endLine':13,'endColumn':31}},'position':{'startLine':5,'startColumn':33,'endLine':5,'endColumn':34}},'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y','name':'y','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/y','name':'y','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':37,'endLine':13,'endColumn':38}},'position':{'startLine':5,'startColumn':40,'endLine':5,'endColumn':41}},'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z','name':'z','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/z','name':'z','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':44,'endLine':13,'endColumn':45}},'position':{'startLine':5,'startColumn':47,'endLine':5,'endColumn':48}}}}"
+        "{'type':'data_clump','key':'parameters_to_parameters_data_clump-lib/src/main/java/javatest/MathStuff.java-javatest.MathStuff/method/printLength(int x, int y, int z)-javatest.MathStuff/method/printMax(int x, int y, int z)-xyz','probability':1,'from_file_path':'src/main/java/javatest/MathStuff.java','from_class_or_interface_name':'MathStuff','from_class_or_interface_key':'javatest.MathStuff','from_method_name':'printLength','from_method_key':'javatest.MathStuff/method/printLength(int x, int y, int z)','to_file_path':'javaTest/src/main/java/javatest/MathStuff.java','to_class_or_interface_name':'MathStuff','to_class_or_interface_key':'javatest.MathStuff','to_method_name':'printMax','to_method_key':'javatest.MathStuff/method/printMax(int x, int y, int z)','data_clump_type':'parameters_to_parameters_data_clump','data_clump_data':{'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x','name':'x','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/x','name':'x','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':30,'endLine':13,'endColumn':31}},'position':{'startLine':5,'startColumn':33,'endLine':5,'endColumn':34}},'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y','name':'y','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/y','name':'y','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':37,'endLine':13,'endColumn':38}},'position':{'startLine':5,'startColumn':40,'endLine':5,'endColumn':41}},'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z','name':'z','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/z','name':'z','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':44,'endLine':13,'endColumn':45}},'position':{'startLine':5,'startColumn':47,'endLine':5,'endColumn':48}}}}"
+
     override fun run() {
 
         VirtualFileManager.getInstance().syncRefresh()
@@ -117,45 +203,11 @@ class DataClumpRefactorer : CliktCommand() {
         val project = projectManager.loadAndOpenProject(input.toPath().toString())!!
         PsiManager.getInstance(project).dropPsiCaches()
         val context =
-                Gson().fromJson<DataClumpTypeContext>(testJSON, DataClumpTypeContext::class.java)
-        println("test")
-        var fromFilePath = ""
-        try {
-            fromFilePath =
-                    java.nio.file.Paths.get(input.toPath().toString(), context.from_file_path)
-                            .toString()
-        } catch (e: Exception) {
-            println("Error while closing project")
-            println(e)
-        }
-        println(fromFilePath.toString())
-        try {
-            val url = "file://" + fromFilePath.toString()
-            println(url)
-            val extractedClassName = "Point"
-            val man = VirtualFileManager.getInstance()
-            println(man)
-            val vFile = man.findFileByUrl(url)!!
-            val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
+            Gson().fromJson<DataClumpTypeContext>(testJSON, DataClumpTypeContext::class.java)
 
-            val extractedClass = createExtractedClass(project, extractedClassName, dataClumpFile)!!
-            println(dataClumpFile.getChildren().size)
-            val dataClumpClass =
-                    (dataClumpFile as PsiClassOwner)
-                            .classes
-                            .filter { it.name == context.from_class_or_interface_name }
-                            .first()
-            println("### Lets go on: " + context.from_method_name)
-            val allMethods = dataClumpClass!!.findMethodsByName(context.from_method_name, false)
-            println(allMethods.size)
-            val method = allMethods.first()
-            println("### ethod found")
-            refactorDataClumpContainingMethod(project, method, extractedClass, context)
-            dataClumpFile.clearCaches()
-        } catch (ex: Exception) {
-            println("ERROR")
-            ex.printStackTrace()
-        }
+            introduceParameterObject(project, context, "Point")
+
+
 
         /*while (true){
             println("Please INPUT!!!!")
@@ -182,7 +234,7 @@ class DataClumpRefactorer : CliktCommand() {
 
 class JavaKotlinDocExtractor : CliktCommand() {
     private val input by
-            argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
+    argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
     private val output by argument(help = "Output directory").file(canBeFile = true)
 
     // Thread safe Map
@@ -269,19 +321,19 @@ class JavaKotlinDocExtractor : CliktCommand() {
         var hasTypeVar = false
 
         type.accept(
-                object : PsiTypeVisitor<Unit>() {
-                    override fun visitType(type: PsiType) {
-                        if (type is PsiClassType) {
-                            val resolve = type.resolve()
-                            if (resolve is PsiTypeParameter) {
-                                hasTypeVar = true
-                            }
-                            for (typeArg in type.parameters) {
-                                typeArg.accept(this)
-                            }
+            object : PsiTypeVisitor<Unit>() {
+                override fun visitType(type: PsiType) {
+                    if (type is PsiClassType) {
+                        val resolve = type.resolve()
+                        if (resolve is PsiTypeParameter) {
+                            hasTypeVar = true
+                        }
+                        for (typeArg in type.parameters) {
+                            typeArg.accept(this)
                         }
                     }
                 }
+            }
         )
 
         return hasTypeVar
@@ -353,11 +405,11 @@ class JavaKotlinDocExtractor : CliktCommand() {
         }
 
         log(
-                psiClass,
-                "-- Check if class is already visited: " +
-                        psiClass.name +
-                        " in module: " +
-                        module.name
+            psiClass,
+            "-- Check if class is already visited: " +
+                    psiClass.name +
+                    " in module: " +
+                    module.name
         )
 
         // val classContextKey = getClassOrInterfaceKey(psiClass)
@@ -377,9 +429,9 @@ class JavaKotlinDocExtractor : CliktCommand() {
     }
 
     private fun saveClassContextToFile(
-            classContext: ClassOrInterfaceTypeContext,
-            psiClass: PsiClass,
-            fileName: String
+        classContext: ClassOrInterfaceTypeContext,
+        psiClass: PsiClass,
+        fileName: String
     ) {
         log(psiClass, "-- Getting gson instance in class: " + psiClass.name)
 
@@ -403,8 +455,8 @@ class JavaKotlinDocExtractor : CliktCommand() {
     }
 
     private fun visitClassOrInterface(
-            psiClass: PsiClass,
-            isSourceCode: Boolean
+        psiClass: PsiClass,
+        isSourceCode: Boolean
     ): ClassOrInterfaceTypeContext {
         log(psiClass, "-- visitClassOrInterface: " + psiClass.name)
 
@@ -447,9 +499,9 @@ class JavaKotlinDocExtractor : CliktCommand() {
     }
 
     private fun extractClassInformations(
-            psiClass: PsiClass,
-            classContext: ClassOrInterfaceTypeContext,
-            isSourceCode: Boolean
+        psiClass: PsiClass,
+        classContext: ClassOrInterfaceTypeContext,
+        isSourceCode: Boolean
     ) {
         classContext.name = psiClass.name ?: ""
         classContext.key = getClassOrInterfaceKey(psiClass)
@@ -469,7 +521,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
         classContext.auxclass = !isSourceCode // if class is not source code, it is an aux class
 
         classContext.position =
-                getAstPosition("extractClass", nameRange, psiClass.project, psiClass.containingFile)
+            getAstPosition("extractClass", nameRange, psiClass.project, psiClass.containingFile)
         classContext.anonymous = psiClass.name == null
 
         // Extract the modifiers
@@ -477,8 +529,8 @@ class JavaKotlinDocExtractor : CliktCommand() {
     }
 
     private fun extractExtendsAndImplements(
-            psiClass: PsiClass,
-            classContext: ClassOrInterfaceTypeContext
+        psiClass: PsiClass,
+        classContext: ClassOrInterfaceTypeContext
     ) {
         // Extract the interfaces this class implements
         val implementsLists = psiClass.implementsList
@@ -513,10 +565,10 @@ class JavaKotlinDocExtractor : CliktCommand() {
     }
 
     private fun getAstPosition(
-            logMessage: String,
-            textRangeOptional: TextRange?,
-            project: Project,
-            file: PsiFile
+        logMessage: String,
+        textRangeOptional: TextRange?,
+        project: Project,
+        file: PsiFile
     ): AstPosition {
         val document = PsiDocumentManager.getInstance(project).getDocument(file)
         val position = AstPosition()
@@ -528,9 +580,9 @@ class JavaKotlinDocExtractor : CliktCommand() {
                 position.startLine = document.getLineNumber(startOffset) + 1
                 position.endLine = document.getLineNumber(endOffset) + 1
                 position.endColumn =
-                        endOffset - document.getLineStartOffset(position.endLine - 1) + 1
+                    endOffset - document.getLineStartOffset(position.endLine - 1) + 1
                 position.startColumn =
-                        startOffset - document.getLineStartOffset(position.startLine - 1) + 1
+                    startOffset - document.getLineStartOffset(position.startLine - 1) + 1
             } else {
                 // Handle the case where the document is null, maybe log an error or throw an
                 // exception
@@ -569,12 +621,12 @@ class JavaKotlinDocExtractor : CliktCommand() {
 
             // Set the position
             fieldContext.position =
-                    getAstPosition(
-                            "extractField",
-                            field.nameIdentifier.textRange,
-                            psiClass.project,
-                            psiClass.containingFile
-                    )
+                getAstPosition(
+                    "extractField",
+                    field.nameIdentifier.textRange,
+                    psiClass.project,
+                    psiClass.containingFile
+                )
 
             fieldContext.classOrInterfaceKey = classKey
 
@@ -624,19 +676,19 @@ class JavaKotlinDocExtractor : CliktCommand() {
             }
             // Set the position
             methodContext.position =
-                    getAstPosition(
-                            "extractMethod",
-                            nameRange,
-                            psiClass.project,
-                            psiClass.containingFile
-                    )
+                getAstPosition(
+                    "extractMethod",
+                    nameRange,
+                    psiClass.project,
+                    psiClass.containingFile
+                )
             methodContext.classOrInterfaceKey = classOrInterfaceKey
 
             // Extract the modifiers and check for @Override annotation
             methodContext.modifiers = getModifiers(method.modifierList)
 
             methodContext.overrideAnnotation =
-                    method.hasAnnotation("Override") // quick way to check if method is overridden
+                method.hasAnnotation("Override") // quick way to check if method is overridden
             // if method is overridden set overrideAnnotation to true
             if (!methodContext.overrideAnnotation) {
                 val superMethods = method.findSuperMethods()
@@ -661,12 +713,12 @@ class JavaKotlinDocExtractor : CliktCommand() {
                     paramRange = paramTextRange
                 }
                 parameterContext.position =
-                        getAstPosition(
-                                "extractParameter",
-                                paramRange,
-                                psiClass.project,
-                                psiClass.containingFile
-                        )
+                    getAstPosition(
+                        "extractParameter",
+                        paramRange,
+                        psiClass.project,
+                        psiClass.containingFile
+                    )
 
                 // Extract the modifiers
                 parameterContext.modifiers = getModifiers(parameter.modifierList)
@@ -695,7 +747,7 @@ class JavaKotlinDocExtractor : CliktCommand() {
             for (i in 0 until amountParameters) {
                 val parameterContext: MethodParameterTypeContext = methodContext.parameters.get(i)
                 parameterContext.key =
-                        methodContextParametersKey + "/parameter/" + parameterContext.name
+                    methodContextParametersKey + "/parameter/" + parameterContext.name
             }
             methodContext.key = methodContextParametersKey
             for (parameterContext in methodContext.parameters) {
@@ -715,9 +767,9 @@ class JavaKotlinDocExtractor : CliktCommand() {
 
         // Split the text of the PsiModifierList into words
         val words =
-                modifierList.text.split(
-                        "\\s+".toRegex()
-                ) // this way we keep the order of the modifiers
+            modifierList.text.split(
+                "\\s+".toRegex()
+            ) // this way we keep the order of the modifiers
 
         // Check each word to see if it's a valid Java modifier
         for (word in words) {
