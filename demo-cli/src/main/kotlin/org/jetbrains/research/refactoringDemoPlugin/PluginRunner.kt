@@ -202,7 +202,10 @@ class DataClumpRefactorer : CliktCommand() {
     }
 
     val testJSON =
-    """{
+    """
+    {
+    'suggestedName':'Point',
+    'context':{
         'type':'data_clump',
         'key':'parameters_to_parameters_data_clump-lib/src/main/java/javatest/MathStuff.java-javatest.MathStuff/method/printLength(int x, int y, int z)-javatest.MathStuff/method/printMax(int x, int y, int z)-xyz',
         'probability':1,
@@ -294,7 +297,9 @@ class DataClumpRefactorer : CliktCommand() {
                 }
             }
         }
-    }"""
+    }
+}
+    """
 
     override fun run() {
 
@@ -302,10 +307,10 @@ class DataClumpRefactorer : CliktCommand() {
         val projectManager = ProjectManager.getInstance()
         val project = projectManager.loadAndOpenProject(input.toPath().toString())!!
         PsiManager.getInstance(project).dropPsiCaches()
-        val context =
-            Gson().fromJson<DataClumpTypeContext>(testJSON, DataClumpTypeContext::class.java)
+        val suggestedNameWithDataClumpContext =
+            Gson().fromJson<SuggestedNameWithDataClumpTypeContext>(testJSON, SuggestedNameWithDataClumpTypeContext::class.java)
             println("### Start refactor")
-            introduceParameterObject(project, context, "Point")
+            introduceParameterObject(project, suggestedNameWithDataClumpContext.context, suggestedNameWithDataClumpContext.suggestedName)
             println("### finnished refactor")
 
 

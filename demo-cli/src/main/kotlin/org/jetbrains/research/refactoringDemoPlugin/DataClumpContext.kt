@@ -43,3 +43,7 @@ data class Position(
     val endLine: Int,
     val endColumn: Int
 )
+data class SuggestedNameWithDataClumpTypeContext(
+    val suggestedName: String,
+    val context: DataClumpTypeContext
+)
