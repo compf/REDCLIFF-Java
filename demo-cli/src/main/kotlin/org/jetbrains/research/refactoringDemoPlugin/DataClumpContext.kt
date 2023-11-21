@@ -47,3 +47,4 @@ data class SuggestedNameWithDataClumpTypeContext(
     val suggestedName: String,
     val context: DataClumpTypeContext
 )
+enum class  DataClumpType{Parameter,Field}

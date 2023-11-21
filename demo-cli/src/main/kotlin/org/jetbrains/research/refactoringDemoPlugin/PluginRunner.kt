@@ -25,6 +25,7 @@ import com.intellij.refactoring.introduceParameterObject.*
 import  com.intellij.refactoring.changeSignature.ParameterInfoImpl;
 import com.intellij.refactoring.JavaRefactoringFactory;
 import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.refactoring.extractclass.ExtractClassProcessor
 
 object PluginRunner : ApplicationStarter {
     @Deprecated("Specify it as `id` for extension definition in a plugin descriptor")
@@ -91,39 +92,23 @@ class DataClumpRefactorer : CliktCommand() {
     }
 
     fun getPackageName(file: PsiFile): String {
+        if(file is PsiJavaFile){
+            return (file as PsiJavaFile).packageName
+        }
         return "javatest";
     }
-
-    class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?) {}
-    val createdClassMap= mutableSetOf<String>()
-    fun introduceParameterObject(project: Project, context: DataClumpTypeContext, suggestedClassName: String) {
-
+    fun process(dataClumpType:DataClumpType,project: Project, suggestedClassName: String,loopedOnce:Boolean,ep:DataClumpEndpoint,relevantParameters:Set<String>){
         val man = VirtualFileManager.getInstance()
-        val endpoints = arrayOf(
-            DataClumpEndpoint(
-                getURI(context.from_file_path)!!,
-                context.from_class_or_interface_name,
-                context.from_method_name!!
-            ),
-            DataClumpEndpoint(
-                getURI(context.to_file_path)!!,
-                context.to_class_or_interface_name,
-                context.to_method_name!!
-            )
-        )
-        val relevantParameters = context.data_clump_data.values.map { it.name }.toSet()
-        var loopedOnce=false
-        for (ep in endpoints) {
-
-
-            val vFile = man.findFileByUrl(ep.filePath)!!
-            val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
-            val packageName = getPackageName(dataClumpFile)
-            val dataClumpClass =
-                (dataClumpFile as PsiClassOwner)
-                    .classes
-                    .filter { it.name == ep.className }
-                    .first()
+        val vFile = man.findFileByUrl(ep.filePath)!!
+        val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
+        val packageName = getPackageName(dataClumpFile)
+        val dataClumpClass =
+            (dataClumpFile as PsiClassOwner)
+                .classes
+                .filter { it.name == ep.className }
+                .first()
+        if(dataClumpType==DataClumpType.Parameter){
+           
             val allMethods = dataClumpClass!!.findMethodsByName(ep.methodName!!, false)
             val method = allMethods[0]
             var index = 0;
@@ -155,6 +140,47 @@ class DataClumpRefactorer : CliktCommand() {
             val processor = IntroduceParameterObjectProcessor(allMethods[0], descriptor, parameterInfos, false)
             println("### running")
             processor.run()
+        }
+        else if(dataClumpType==DataClumpType.Field){
+            val moveDestination =
+            JavaRefactoringFactory.getInstance(project).createSourceFolderPreservingMoveDestination(packageName)
+            val fields = mutableListOf<PsiField>()
+            for (field in dataClumpClass.fields) {
+                println(field.name)
+                if (field.name in relevantParameters) {
+                    fields.add(field)
+                }
+            }
+            val processor=ExtractClassProcessor(dataClumpClass,fields,emptyList(),emptyList(),packageName,moveDestination,suggestedClassName,"public",true,emptyList(),false)
+            processor.run()
+        }
+    }
+    class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?) {}
+    val createdClassMap= mutableSetOf<String>()
+    fun introduceParameterObject(project: Project, context: DataClumpTypeContext, suggestedClassName: String) {
+
+        
+        val endpoints = arrayOf(
+            DataClumpEndpoint(
+                getURI(context.from_file_path)!!,
+                context.from_class_or_interface_name,
+                context.from_method_name!!
+            ),
+            DataClumpEndpoint(
+                getURI(context.to_file_path)!!,
+                context.to_class_or_interface_name,
+                context.to_method_name!!
+            )
+        )
+        
+        var loopedOnce=false
+        for (ep in endpoints) {
+
+            var type = DataClumpType.Parameter
+            if(ep.methodName==null){
+                type=DataClumpType.Field
+            }
+            process(type,project, suggestedClassName,loopedOnce,ep,context.data_clump_data.values.map { it.name }.toSet())
             loopedOnce=true
 
         }
