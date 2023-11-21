@@ -112,6 +112,7 @@ class DataClumpRefactorer : CliktCommand() {
             )
         )
         val relevantParameters = context.data_clump_data.values.map { it.name }.toSet()
+        var loopedOnce=false
         for (ep in endpoints) {
 
 
@@ -143,7 +144,7 @@ class DataClumpRefactorer : CliktCommand() {
                     suggestedClassName,
                     packageName,
                     moveDestination,
-                    suggestedClassName in createdClassMap,
+                    suggestedClassName in createdClassMap || loopedOnce,
                     false,
                     "public",
                     parameterInfos.toTypedArray(),
@@ -154,9 +155,10 @@ class DataClumpRefactorer : CliktCommand() {
             val processor = IntroduceParameterObjectProcessor(allMethods[0], descriptor, parameterInfos, false)
             println("### running")
             processor.run()
-            createdClassMap.add(suggestedClassName)
+            loopedOnce=true
 
         }
+        createdClassMap.add(suggestedClassName)
         com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveAllDocuments()
 
 
@@ -200,7 +202,99 @@ class DataClumpRefactorer : CliktCommand() {
     }
 
     val testJSON =
-        "{'type':'data_clump','key':'parameters_to_parameters_data_clump-lib/src/main/java/javatest/MathStuff.java-javatest.MathStuff/method/printLength(int x, int y, int z)-javatest.MathStuff/method/printMax(int x, int y, int z)-xyz','probability':1,'from_file_path':'src/main/java/javatest/MathStuff.java','from_class_or_interface_name':'MathStuff','from_class_or_interface_key':'javatest.MathStuff','from_method_name':'printLength','from_method_key':'javatest.MathStuff/method/printLength(int x, int y, int z)','to_file_path':'src/main/java/javatest/MathStuff.java','to_class_or_interface_name':'MathStuff','to_class_or_interface_key':'javatest.MathStuff','to_method_name':'printMax','to_method_key':'javatest.MathStuff/method/printMax(int x, int y, int z)','data_clump_type':'parameters_to_parameters_data_clump','data_clump_data':{'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x','name':'x','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/x','name':'x','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':30,'endLine':13,'endColumn':31}},'position':{'startLine':5,'startColumn':33,'endLine':5,'endColumn':34}},'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y','name':'y','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/y','name':'y','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':37,'endLine':13,'endColumn':38}},'position':{'startLine':5,'startColumn':40,'endLine':5,'endColumn':41}},'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z','name':'z','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/z','name':'z','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':44,'endLine':13,'endColumn':45}},'position':{'startLine':5,'startColumn':47,'endLine':5,'endColumn':48}}}}"
+    """{
+        'type':'data_clump',
+        'key':'parameters_to_parameters_data_clump-lib/src/main/java/javatest/MathStuff.java-javatest.MathStuff/method/printLength(int x, int y, int z)-javatest.MathStuff/method/printMax(int x, int y, int z)-xyz',
+        'probability':1,
+        'from_file_path':'src/main/java/javatest/MathStuff.java'
+        ,'from_class_or_interface_name':'MathStuff'
+        ,'from_class_or_interface_key':'javatest.MathStuff',
+        'from_method_name':'printLength',
+        'from_method_key':'javatest.MathStuff/method/printLength(int x, int y, int z)',
+        'to_file_path':'src/main/java/javatest/MathStuff.java',
+        'to_class_or_interface_name':'MathStuff',
+        to_class_or_interface_key':'javatest.MathStuff',
+        'to_method_name':'printMax',
+        'to_method_key':'javatest.MathStuff/method/printMax(int x, int y, int z)',
+        'data_clump_type':'parameters_to_parameters_data_clump',
+        'data_clump_data':{
+            'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x':{
+                'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x',
+                'name':'x',
+                'type':'int',
+                'probability':1,
+                'modifiers':[],
+                'to_variable':{
+                    'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/x',
+                    'name':'x',
+                    'type':'int',
+                    'modifiers':[],
+                    'position':{
+                        'startLine':13,'
+                        startColumn':30,
+                        'endLine':13,
+                        'endColumn':31
+                    }
+                },
+                'position':{
+                    'startLine':5,
+                    'startColumn':33,
+                    'endLine':5,
+                    'endColumn':34
+                }
+            },
+            'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y':{
+                'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y',
+                'name':'y',
+                'type':'int',
+                'probability':1,
+                'modifiers':[],
+                'to_variable':{
+                    'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/y',
+                    'name':'y',
+                    'type':'int',
+                    'modifiers':[],
+                    'position':{
+                        'startLine':13,
+                        'startColumn':37,
+                        'endLine':13,
+                        'endColumn':38
+                    }
+                },
+                'position':{
+                    'startLine':5,
+                    'startColumn':40,
+                    'endLine':5,
+                    'endColumn':41
+                }
+            },
+            'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z':{
+                'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z',
+                'name':'z',
+                'type':'int',
+                'probability':1,
+                'modifiers':[],
+                'to_variable':{
+                    'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/z',
+                    'name':'z',
+                    'type':'int',
+                    'modifiers':[],
+                    'position':{
+                        'startLine':13,
+                        'startColumn':44,
+                        'endLine':13,
+                        'endColumn':45
+                    }
+                },
+                'position':{
+                    'startLine':5,
+                    'startColumn':47,
+                    'endLine':5,
+                    'endColumn':48
+                }
+            }
+        }
+    }"""
 
     override fun run() {
 
