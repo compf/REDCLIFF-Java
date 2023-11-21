@@ -95,7 +95,7 @@ class DataClumpRefactorer : CliktCommand() {
     }
 
     class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?) {}
-
+    val createdClassMap= mutableSetOf<String>()
     fun introduceParameterObject(project: Project, context: DataClumpTypeContext, suggestedClassName: String) {
 
         val man = VirtualFileManager.getInstance()
@@ -143,7 +143,7 @@ class DataClumpRefactorer : CliktCommand() {
                     suggestedClassName,
                     packageName,
                     moveDestination,
-                    false,
+                    suggestedClassName in createdClassMap,
                     false,
                     "public",
                     parameterInfos.toTypedArray(),
@@ -152,8 +152,13 @@ class DataClumpRefactorer : CliktCommand() {
                 )
             descriptor.existingClass=dataClumpClass
             val processor = IntroduceParameterObjectProcessor(allMethods[0], descriptor, parameterInfos, false)
+            println("### running")
             processor.run()
+            createdClassMap.add(suggestedClassName)
+
         }
+        com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveAllDocuments()
+
 
 
     }
@@ -191,10 +196,11 @@ class DataClumpRefactorer : CliktCommand() {
             val doc = PsiDocumentManager.getInstance(project).getDocument(method.containingFile)!!
             com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveDocument(doc)
         }
+
     }
 
     val testJSON =
-        "{'type':'data_clump','key':'parameters_to_parameters_data_clump-lib/src/main/java/javatest/MathStuff.java-javatest.MathStuff/method/printLength(int x, int y, int z)-javatest.MathStuff/method/printMax(int x, int y, int z)-xyz','probability':1,'from_file_path':'src/main/java/javatest/MathStuff.java','from_class_or_interface_name':'MathStuff','from_class_or_interface_key':'javatest.MathStuff','from_method_name':'printLength','from_method_key':'javatest.MathStuff/method/printLength(int x, int y, int z)','to_file_path':'javaTest/src/main/java/javatest/MathStuff.java','to_class_or_interface_name':'MathStuff','to_class_or_interface_key':'javatest.MathStuff','to_method_name':'printMax','to_method_key':'javatest.MathStuff/method/printMax(int x, int y, int z)','data_clump_type':'parameters_to_parameters_data_clump','data_clump_data':{'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x','name':'x','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/x','name':'x','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':30,'endLine':13,'endColumn':31}},'position':{'startLine':5,'startColumn':33,'endLine':5,'endColumn':34}},'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y','name':'y','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/y','name':'y','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':37,'endLine':13,'endColumn':38}},'position':{'startLine':5,'startColumn':40,'endLine':5,'endColumn':41}},'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z','name':'z','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/z','name':'z','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':44,'endLine':13,'endColumn':45}},'position':{'startLine':5,'startColumn':47,'endLine':5,'endColumn':48}}}}"
+        "{'type':'data_clump','key':'parameters_to_parameters_data_clump-lib/src/main/java/javatest/MathStuff.java-javatest.MathStuff/method/printLength(int x, int y, int z)-javatest.MathStuff/method/printMax(int x, int y, int z)-xyz','probability':1,'from_file_path':'src/main/java/javatest/MathStuff.java','from_class_or_interface_name':'MathStuff','from_class_or_interface_key':'javatest.MathStuff','from_method_name':'printLength','from_method_key':'javatest.MathStuff/method/printLength(int x, int y, int z)','to_file_path':'src/main/java/javatest/MathStuff.java','to_class_or_interface_name':'MathStuff','to_class_or_interface_key':'javatest.MathStuff','to_method_name':'printMax','to_method_key':'javatest.MathStuff/method/printMax(int x, int y, int z)','data_clump_type':'parameters_to_parameters_data_clump','data_clump_data':{'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x','name':'x','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/x','name':'x','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':30,'endLine':13,'endColumn':31}},'position':{'startLine':5,'startColumn':33,'endLine':5,'endColumn':34}},'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y','name':'y','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/y','name':'y','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':37,'endLine':13,'endColumn':38}},'position':{'startLine':5,'startColumn':40,'endLine':5,'endColumn':41}},'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z':{'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z','name':'z','type':'int','probability':1,'modifiers':[],'to_variable':{'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/z','name':'z','type':'int','modifiers':[],'position':{'startLine':13,'startColumn':44,'endLine':13,'endColumn':45}},'position':{'startLine':5,'startColumn':47,'endLine':5,'endColumn':48}}}}"
 
     override fun run() {
 
@@ -204,8 +210,9 @@ class DataClumpRefactorer : CliktCommand() {
         PsiManager.getInstance(project).dropPsiCaches()
         val context =
             Gson().fromJson<DataClumpTypeContext>(testJSON, DataClumpTypeContext::class.java)
-
+            println("### Start refactor")
             introduceParameterObject(project, context, "Point")
+            println("### finnished refactor")
 
 
 
@@ -227,7 +234,9 @@ class DataClumpRefactorer : CliktCommand() {
 
 
         }*/
+        println("### saving")
         PsiDocumentManager.getInstance(project).commitAllDocuments()
+        println("### exiting")
         exitProcess(0)
     }
 }
