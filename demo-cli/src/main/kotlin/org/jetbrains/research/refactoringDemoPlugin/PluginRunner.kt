@@ -1,12 +1,18 @@
 package org.jetbrains.research.refactoringDemoPlugin
 
+import ai.grazie.utils.toDistinctTypedArray
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.types.file
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.intellij.lang.Language
+import com.intellij.lang.java.JavaLanguage
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ApplicationStarter
+import com.intellij.openapi.application.WriteAction
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
@@ -25,7 +31,14 @@ import com.intellij.refactoring.introduceParameterObject.*
 import  com.intellij.refactoring.changeSignature.ParameterInfoImpl;
 import com.intellij.refactoring.JavaRefactoringFactory;
 import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.vfs.newvfs.RefreshQueue
+import com.intellij.psi.impl.file.PsiDirectoryFactory
+import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.extractclass.ExtractClassProcessor
+import com.intellij.refactoring.suggested.startOffset
+import org.jetbrains.kotlin.idea.base.util.reformat
+import org.jetbrains.kotlin.idea.gradleTooling.get
+import org.jetbrains.kotlin.load.java.sources.JavaSourceElementFactory
 
 object PluginRunner : ApplicationStarter {
     @Deprecated("Specify it as `id` for extension definition in a plugin descriptor")
@@ -54,31 +67,58 @@ class DataClumpRefactorer : CliktCommand() {
 
         return offset + columnNumber - 1
     }
-
-    fun createExtractedClass(project: Project, className: String, file: PsiFile): PsiClass? {
+    val nameClassMap= mutableMapOf<String,PsiClass>()
+    fun createExtractedClass(project: Project, className: String, context: DataClumpTypeContext,variableList:List<PsiVariable>): PsiClass? {
         println("### Creating class")
-        val oldFile = file.containingDirectory.getVirtualFile().findChild(className + ".java")
-        if (oldFile != null) {
-            oldFile.delete(this)
-        }
+       if(className in nameClassMap){
+           return nameClassMap[className]
+       }
         val paramMap = mutableMapOf<String, String>()
-        paramMap.put("PACKAGE_NAME", "javatest")
-        val result =
-            JavaDirectoryService.getInstance()
-                .createClass(
-                    file.containingDirectory,
-                    className,
-                    com.intellij
-                        .ide
-                        .fileTemplates
-                        .JavaTemplateUtil
-                        .INTERNAL_CLASS_TEMPLATE_NAME,
-                    false,
-                    paramMap
-                )
+       val file= PsiManager.getInstance(project).findFile(VirtualFileManager.getInstance().findFileByUrl(getURI(context.from_file_path)!!)!!)!!
+        paramMap.put("PACKAGE_NAME", getPackageName(file))
+        val relevantParameters = context.data_clump_data.values.map { it.name }.toSet()
+        val factory= PsiElementFactory.getInstance(project);
+        val extractedClass =factory.createClass(className)
+
+        for (param in variableList) {
+            println(param.name)
+            if (param.name in relevantParameters) {
+                val field=factory.createField(param.name!!,param.type)
+                extractedClass.add(field)
+                val name=param.name!!
+                val capitalizedName=name.replaceFirstChar { Character.toUpperCase(it) }
+                val getterContent="""
+                    public ${param.type.canonicalText} get${capitalizedName}(){
+                    return ${name};
+                    }
+                """.trimIndent()
+                val getter=factory.createMethodFromText(getterContent,extractedClass)
+                extractedClass.add(getter)
+
+                val setterContent=
+                    """
+                        public void set${capitalizedName}(${param.type.canonicalText} ${name}){
+                        this.${name}=${name};
+                        }
+                    """.trimIndent()
+                val setter=factory.createMethodFromText(setterContent,extractedClass)
+                extractedClass.add(setter)
+
+            }
+            println(extractedClass.text)
+
+        }
+        extractedClass.reformat(true)
+
+        val outFile=PsiFileFactory.getInstance(project).createFileFromText("Point.java", JavaLanguage.INSTANCE!!,extractedClass.text)
+        WriteAction.run<Exception>{
+            file.containingDirectory.add(outFile)
+            FileDocumentManager.getInstance().saveAllDocuments()
+        }
+
 
         println("### finnished class")
-        return result
+        return extractedClass
     }
 
     fun getURI(path: String): String? {
@@ -123,7 +163,7 @@ class DataClumpRefactorer : CliktCommand() {
             }
 
             val moveDestination =
-                JavaRefactoringFactory.getInstance(project).createSourceFolderPreservingMoveDestination(packageName)
+                MyMoveDestination()
             val descriptor =
                 com.intellij.refactoring.introduceparameterobject.JavaIntroduceParameterObjectClassDescriptor(
                     suggestedClassName,
@@ -136,8 +176,9 @@ class DataClumpRefactorer : CliktCommand() {
                     method,
                     true
                 )
-            descriptor.existingClass=dataClumpClass
+           descriptor.existingClass=dataClumpClass
             val processor = IntroduceParameterObjectProcessor(allMethods[0], descriptor, parameterInfos, false)
+
             println("### running")
             processor.run()
         }
@@ -180,7 +221,13 @@ class DataClumpRefactorer : CliktCommand() {
             if(ep.methodName==null){
                 type=DataClumpType.Field
             }
-            process(type,project, suggestedClassName,loopedOnce,ep,context.data_clump_data.values.map { it.name }.toSet())
+
+                process(type,project, suggestedClassName,loopedOnce,ep,context.data_clump_data.values.map { it.name }.toSet())
+
+
+
+            PsiDocumentManager.getInstance(project).commitAllDocuments()
+            FileDocumentManager.getInstance().saveAllDocuments()
             loopedOnce=true
 
         }
@@ -191,38 +238,75 @@ class DataClumpRefactorer : CliktCommand() {
 
     }
 
+    fun getVariableList(project:Project,context: DataClumpTypeContext):List<PsiVariable> {
+        val method=getMethod(project,context)
+        if(method!=null){
+            return method.parameterList.parameters.toList()
+        }
+        else{
+            return emptyList()
+        }
+    }
+    fun getMethod(project: Project,context: DataClumpTypeContext):PsiMethod?{
+        val man=VirtualFileManager.getInstance()
+        val vFile = man.findFileByUrl(getURI(context.from_file_path)!!)!!
+        val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
+        val dataClumpClass =
+            (dataClumpFile as PsiClassOwner)
+                .classes
+                .filter { it.name == context.from_class_or_interface_name }
+                .first()
+        if (context.from_method_key!=null) {
 
+            val allMethods = dataClumpClass!!.findMethodsByName(context.from_method_name!!, false)
+            val method = allMethods[0]
+            return method
+        }
+        return null
+    }
+    //https://github.com/JetBrains/intellij-community/blob/cb1f19a78bb9a4db29b33ff186cdb60ceab7f64c/java/java-impl-refactorings/src/com/intellij/refactoring/encapsulateFields/JavaEncapsulateFieldHelper.java#L86
     fun refactorDataClumpContainingMethod(
         project: Project,
         method: PsiMethod,
         extractedClass: PsiClass,
         context: DataClumpTypeContext
     ) {
+        var type:PsiType =
+            JavaPsiFacade.getInstance(project)
+                .getElementFactory()
+                .createType(extractedClass)
+        type=PsiType.BOOLEAN
+        val newlyAdded =
+            PsiElementFactory.getInstance(project)
+                .createParameter(extractedClass.name!!.decapitalize(), type)
+        com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction(project) {
+            method.parameterList.add(newlyAdded)
+        }
+
 
         com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction(project) {
             println("### Start refactor method")
             val relevantParameters = context.data_clump_data.values.map { it.name }.toSet()
             for (param in method.parameterList.parameters) {
                 println(param.name)
+                val name=param.name!!
+                val capitalizedName=name.replaceFirstChar { Character.toUpperCase(it) }
                 if (param.name in relevantParameters) {
+                    val result=ReferencesSearch.search(param)
+                    for(r in result){
+                        r.bindToElement(newlyAdded.typeElement!!.children.filter { it is PsiVariable &&  it.name=="get"+capitalizedName }.first())
 
+                    }
+                    //println(result.toDistinctTypedArray().size)
                     param.delete()
                 }
             }
             println("### modify method")
-            val type =
-                JavaPsiFacade.getInstance(project)
-                    .getElementFactory()
-                    .createType(extractedClass)
-            val psiParam =
-                PsiElementFactory.getInstance(project)
-                    .createParameter(extractedClass.name!!.decapitalize(), type)
-            method.parameterList.add(psiParam)
+
             println("### modify method finnished")
             println(method.isValid())
             println(method.text)
-            val doc = PsiDocumentManager.getInstance(project).getDocument(method.containingFile)!!
-            com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveDocument(doc)
+            com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveAllDocuments()
         }
 
     }
@@ -336,8 +420,18 @@ class DataClumpRefactorer : CliktCommand() {
         val suggestedNameWithDataClumpContext =
             Gson().fromJson<SuggestedNameWithDataClumpTypeContext>(testJSON, SuggestedNameWithDataClumpTypeContext::class.java)
             println("### Start refactor")
-            introduceParameterObject(project, suggestedNameWithDataClumpContext.context, suggestedNameWithDataClumpContext.suggestedName)
-            println("### finnished refactor")
+        val session=RefreshQueue.getInstance().createSession(false,true){
+
+        }
+        session.launch()
+        introduceParameterObject(project,suggestedNameWithDataClumpContext.context,suggestedNameWithDataClumpContext.suggestedName)
+        PsiDocumentManager.getInstance(project).commitAllDocuments()
+        FileDocumentManager.getInstance().saveAllDocuments()
+            //val extractedClass=createExtractedClass(project,suggestedNameWithDataClumpContext.suggestedName,suggestedNameWithDataClumpContext.context,getVariableList(project,suggestedNameWithDataClumpContext.context))
+            //refactorDataClumpContainingMethod(project,getMethod(project,suggestedNameWithDataClumpContext.context)!!,extractedClass!!,suggestedNameWithDataClumpContext.context)
+
+
+        println("### finnished refactor")
 
 
 
