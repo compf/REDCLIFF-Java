@@ -33,13 +33,17 @@ import com.intellij.refactoring.JavaRefactoringFactory;
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.newvfs.RefreshQueue
 import com.intellij.psi.impl.file.PsiDirectoryFactory
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.search.SearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
+import com.intellij.psi.util.findParentOfType
 import com.intellij.refactoring.extractclass.ExtractClassProcessor
 import com.intellij.refactoring.memberPullUp.PullUpProcessor
 import com.intellij.refactoring.move.moveMembers.MoveMembersProcessor
 import com.intellij.refactoring.suggested.startOffset
 import com.intellij.refactoring.util.DocCommentPolicy
 import com.intellij.refactoring.util.classMembers.MemberInfo
+import com.intellij.util.IncorrectOperationException
 import io.ktor.util.date.*
 import org.jetbrains.kotlin.idea.base.util.reformat
 import org.jetbrains.kotlin.idea.gradleTooling.get
@@ -135,12 +139,15 @@ class DataClumpRefactorer : CliktCommand() {
             return null
         }
     }
-
+    fun commit(project: Project){
+        PsiDocumentManager.getInstance(project).commitAllDocuments()
+        FileDocumentManager.getInstance().saveAllDocuments()
+    }
     fun getPackageName(file: PsiFile): String {
         if(file is PsiJavaFile){
             return (file as PsiJavaFile).packageName
         }
-        return "javatest";
+        return "org/example";
     }
     fun process(dataClumpType:String,project: Project, suggestedClassName: String,classProbablyExisting:Boolean,ep:DataClumpEndpoint,relevantParameters:Set<String>){
         val man = VirtualFileManager.getInstance()
@@ -210,8 +217,47 @@ class DataClumpRefactorer : CliktCommand() {
             extractClassProcessor.run()
 
             if(classProbablyExisting){
-                val moveUpProcessor=PullUpProcessor(extractClassProcessor.createdClass,nameClassMap[suggestedClassName],members.toTypedArray(),null)
-                moveUpProcessor.run()
+                val realClass=nameClassMap[suggestedClassName]!!
+                commit(project)
+                val session=RefreshQueue.getInstance().createSession(false,true){
+
+                }
+                session.launch()
+              val references= ReferencesSearch.search(extractClassProcessor.createdClass, GlobalSearchScope.projectScope(project)).findAll()
+                val refList=references.toList()
+                /*for(r in refList){
+                    val methodParent=r.element.findParentOfType<PsiMethod>()
+                    val fieldParent=r.element.findParentOfType<PsiField>()
+                    val instantiationParent=r.element.findParentOfType<PsiNewExpression>()
+                    val paramParent=r.element.findParentOfType<PsiParameter>()
+                    val variableParent=r.element.findParentOfType<PsiVariable>()
+                    WriteAction.run<IncorrectOperationException>(){
+                        try {
+                            if(instantiationParent!=null){
+                                instantiationParent.classReference!!.replace(realClass)
+                            }
+                            else if(paramParent!=null){
+                                paramParent.typeElement!!.replace(realClass)
+                            }
+                            else if(fieldParent!=null){
+                                fieldParent.typeElement!!.replace(realClass)
+                            }
+                            else if(methodParent!=null){
+                                methodParent.returnTypeElement!!.replace(realClass)
+                            }
+                            else if(variableParent!=null){
+                                variableParent.typeElement!!.replace(realClass)
+                            }
+                        }catch (ex:Exception){
+                            println("test")
+                        }
+
+
+
+                    }
+
+
+                }*/
             }
             else{
                 nameClassMap[suggestedClassName]=extractClassProcessor.createdClass
@@ -245,8 +291,8 @@ class DataClumpRefactorer : CliktCommand() {
 
 
 
-            PsiDocumentManager.getInstance(project).commitAllDocuments()
-            FileDocumentManager.getInstance().saveAllDocuments()
+           // PsiDocumentManager.getInstance(project).commitAllDocuments()
+            //FileDocumentManager.getInstance().saveAllDocuments()
             loopedOnce=true
 
         }
@@ -325,7 +371,7 @@ class DataClumpRefactorer : CliktCommand() {
             println("### modify method finnished")
             println(method.isValid())
             println(method.text)
-            com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveAllDocuments()
+           // com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveAllDocuments()
         }
 
     }
@@ -336,28 +382,28 @@ class DataClumpRefactorer : CliktCommand() {
     'suggestedName':'Point',
     'context':{
         'type':'data_clump',
-        'key':'parameters_to_parameters_data_clump-lib/src/main/java/javatest/MathStuff.java-javatest.MathStuff/method/printLength(int x, int y, int z)-javatest.MathStuff/method/printMax(int x, int y, int z)-xyz',
+        'key':'parameters_to_parameters_data_clump-lib/src/main/java/org/example/MathStuff.java-org/example/MathStuff/method/printLength(int x, int y, int z)-org/example/MathStuff/method/printMax(int x, int y, int z)-xyz',
         'probability':1,
-        'from_file_path':'src/main/java/javatest/MathStuff.java'
+        'from_file_path':'src/main/java/org/example/MathStuff.java'
         ,'from_class_or_interface_name':'MathStuff'
-        ,'from_class_or_interface_key':'javatest.MathStuff',
+        ,'from_class_or_interface_key':'org/example/MathStuff',
         'from_method_name':'printLength',
-        'from_method_key':'javatest.MathStuff/method/printLength(int x, int y, int z)',
-        'to_file_path':'src/main/java/javatest/MathStuff.java',
+        'from_method_key':'org/example/MathStuff/method/printLength(int x, int y, int z)',
+        'to_file_path':'src/main/java/org/example/MathStuff.java',
         'to_class_or_interface_name':'MathStuff',
-        to_class_or_interface_key':'javatest.MathStuff',
+        to_class_or_interface_key':'org/example/MathStuff',
         'to_method_name':'printMax',
-        'to_method_key':'javatest.MathStuff/method/printMax(int x, int y, int z)',
+        'to_method_key':'org/example/MathStuff/method/printMax(int x, int y, int z)',
         'data_clump_type':'parameters_to_parameters_data_clump',
         'data_clump_data':{
-            'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x':{
-                'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x',
+            'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/x':{
+                'key':'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/x',
                 'name':'x',
                 'type':'int',
                 'probability':1,
                 'modifiers':[],
                 'to_variable':{
-                    'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/x',
+                    'key':'org/example/MathStuff/method/printMax(int x, int y, int z)/parameter/x',
                     'name':'x',
                     'type':'int',
                     'modifiers':[],
@@ -375,14 +421,14 @@ class DataClumpRefactorer : CliktCommand() {
                     'endColumn':34
                 }
             },
-            'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y':{
-                'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y',
+            'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/y':{
+                'key':'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/y',
                 'name':'y',
                 'type':'int',
                 'probability':1,
                 'modifiers':[],
                 'to_variable':{
-                    'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/y',
+                    'key':'org/example/MathStuff/method/printMax(int x, int y, int z)/parameter/y',
                     'name':'y',
                     'type':'int',
                     'modifiers':[],
@@ -400,14 +446,14 @@ class DataClumpRefactorer : CliktCommand() {
                     'endColumn':41
                 }
             },
-            'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z':{
-                'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z',
+            'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/z':{
+                'key':'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/z',
                 'name':'z',
                 'type':'int',
                 'probability':1,
                 'modifiers':[],
                 'to_variable':{
-                    'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/z',
+                    'key':'org/example/MathStuff/method/printMax(int x, int y, int z)/parameter/z',
                     'name':'z',
                     'type':'int',
                     'modifiers':[],
@@ -435,25 +481,25 @@ class DataClumpRefactorer : CliktCommand() {
     'suggestedName':'Point',
     'context':{
         'type':'data_clump',
-        'key':'parameters_to_parameters_data_clump-lib/src/main/java/javatest/MathStuff.java-javatest.MathStuff/method/printLength(int x, int y, int z)-javatest.MathStuff/method/printMax(int x, int y, int z)-xyz',
+        'key':'parameters_to_parameters_data_clump-lib/src/main/java/org/example/MathStuff.java-org/example/MathStuff/method/printLength(int x, int y, int z)-org/example/MathStuff/method/printMax(int x, int y, int z)-xyz',
         'probability':1,
-        'from_file_path':'src/main/java/javatest/MathStuff.java'
+        'from_file_path':'src/main/java/org/example/MathStuff.java'
         ,'from_class_or_interface_name':'MathStuff'
-        ,'from_class_or_interface_key':'javatest.MathStuff',
-        'to_file_path':'src/main/java/javatest/Library.java',
+        ,'from_class_or_interface_key':'org/example/MathStuff',
+        'to_file_path':'src/main/java/org/example/Library.java',
         'to_class_or_interface_name':'Library',
-        to_class_or_interface_key':'javatest.Library',
+        to_class_or_interface_key':'org/example/Library',
    
         'data_clump_type':'fields_to_fields_data_clump',
         'data_clump_data':{
-            'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x':{
-                'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x',
+            'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/x':{
+                'key':'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/x',
                 'name':'sign',
                 'type':'boolean',
                 'probability':1,
                 'modifiers':[],
                 'to_variable':{
-                    'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/x',
+                    'key':'org/example/MathStuff/method/printMax(int x, int y, int z)/parameter/x',
                     'name':'sign',
                     'type':'boolean',
                     'modifiers':[],
@@ -471,14 +517,14 @@ class DataClumpRefactorer : CliktCommand() {
                     'endColumn':34
                 }
             },
-            'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y':{
-                'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y',
+            'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/y':{
+                'key':'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/y',
                 'name':'mantissa',
                 'type':'double',
                 'probability':1,
                 'modifiers':[],
                 'to_variable':{
-                    'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/y',
+                    'key':'org/example/MathStuff/method/printMax(int x, int y, int z)/parameter/y',
                     'name':'mantissa',
                     'type':'double',
                     'modifiers':[],
@@ -496,14 +542,14 @@ class DataClumpRefactorer : CliktCommand() {
                     'endColumn':41
                 }
             },
-            'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z':{
-                'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z',
+            'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/z':{
+                'key':'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/z',
                 'name':'exponent',
                 'type':'int',
                 'probability':1,
                 'modifiers':[],
                 'to_variable':{
-                    'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/z',
+                    'key':'org/example/MathStuff/method/printMax(int x, int y, int z)/parameter/z',
                     'name':'exponent',
                     'type':'int',
                     'modifiers':[],
@@ -540,8 +586,8 @@ class DataClumpRefactorer : CliktCommand() {
         }
         session.launch()
         introduceParameterObject(project,suggestedNameWithDataClumpContext.context,suggestedNameWithDataClumpContext.suggestedName)
-        PsiDocumentManager.getInstance(project).commitAllDocuments()
-        FileDocumentManager.getInstance().saveAllDocuments()
+        //PsiDocumentManager.getInstance(project).commitAllDocuments()
+        //FileDocumentManager.getInstance().saveAllDocuments()
             //val extractedClass=createExtractedClass(project,suggestedNameWithDataClumpContext.suggestedName,suggestedNameWithDataClumpContext.context,getVariableList(project,suggestedNameWithDataClumpContext.context))
             //refactorDataClumpContainingMethod(project,getMethod(project,suggestedNameWithDataClumpContext.context)!!,extractedClass!!,suggestedNameWithDataClumpContext.context)
 
@@ -569,7 +615,7 @@ class DataClumpRefactorer : CliktCommand() {
 
         }*/
         println("### saving")
-        PsiDocumentManager.getInstance(project).commitAllDocuments()
+        //PsiDocumentManager.getInstance(project).commitAllDocuments()
         println("### exiting")
         exitProcess(0)
     }
