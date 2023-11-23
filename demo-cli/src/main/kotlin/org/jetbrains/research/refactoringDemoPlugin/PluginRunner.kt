@@ -1,18 +1,15 @@
 package org.jetbrains.research.refactoringDemoPlugin
 
-import ai.grazie.utils.toDistinctTypedArray
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.types.file
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import com.intellij.lang.Language
 import com.intellij.lang.java.JavaLanguage
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ApplicationStarter
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
@@ -29,25 +26,16 @@ import org.jetbrains.research.refactoringDemoPlugin.util.extractModules
 import org.jetbrains.research.refactoringDemoPlugin.util.findPsiFilesByExtension
 import com.intellij.refactoring.introduceParameterObject.*
 import  com.intellij.refactoring.changeSignature.ParameterInfoImpl;
-import com.intellij.refactoring.JavaRefactoringFactory;
-import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.newvfs.RefreshQueue
-import com.intellij.psi.impl.file.PsiDirectoryFactory
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.SearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
-import com.intellij.psi.util.findParentOfType
 import com.intellij.refactoring.extractclass.ExtractClassProcessor
-import com.intellij.refactoring.memberPullUp.PullUpProcessor
-import com.intellij.refactoring.move.moveMembers.MoveMembersProcessor
-import com.intellij.refactoring.suggested.startOffset
-import com.intellij.refactoring.util.DocCommentPolicy
 import com.intellij.refactoring.util.classMembers.MemberInfo
-import com.intellij.util.IncorrectOperationException
+import dataClumpRefactoring.DataClumpTypeContext
+import dataClumpRefactoring.KeepLocationMoveDestination
+import dataClumpRefactoring.SuggestedNameWithDataClumpTypeContext
 import io.ktor.util.date.*
 import org.jetbrains.kotlin.idea.base.util.reformat
-import org.jetbrains.kotlin.idea.gradleTooling.get
-import org.jetbrains.kotlin.load.java.sources.JavaSourceElementFactory
 
 object PluginRunner : ApplicationStarter {
     @Deprecated("Specify it as `id` for extension definition in a plugin descriptor")
@@ -66,316 +54,8 @@ class DataClumpRefactorer : CliktCommand() {
     private val input by
     argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
     private val output by argument(help = "Output directory").file(canBeFile = true)
-    fun calculateOffset(text: CharSequence, lineNumber: Int, columnNumber: Int): Int {
-        var offset = 0
-        val lines = text.split('\n')
 
-        for (i in 0 until lineNumber - 1) {
-            offset += lines[i].length + 1 // Add 1 for the newline character
-        }
-
-        return offset + columnNumber - 1
-    }
-    val nameClassMap= mutableMapOf<String,PsiClass>()
-    fun createExtractedClass(project: Project, className: String, context: DataClumpTypeContext,variableList:List<PsiVariable>): PsiClass? {
-        println("### Creating class")
-       if(className in nameClassMap){
-           return nameClassMap[className]
-       }
-        val paramMap = mutableMapOf<String, String>()
-       val file= PsiManager.getInstance(project).findFile(VirtualFileManager.getInstance().findFileByUrl(getURI(context.from_file_path)!!)!!)!!
-        paramMap.put("PACKAGE_NAME", getPackageName(file))
-        val relevantParameters = context.data_clump_data.values.map { it.name }.toSet()
-        val factory= PsiElementFactory.getInstance(project);
-        val extractedClass =factory.createClass(className)
-
-        for (param in variableList) {
-            println(param.name)
-            if (param.name in relevantParameters) {
-                val field=factory.createField(param.name!!,param.type)
-                extractedClass.add(field)
-                val name=param.name!!
-                val capitalizedName=name.replaceFirstChar { Character.toUpperCase(it) }
-                val getterContent="""
-                    public ${param.type.canonicalText} get${capitalizedName}(){
-                    return ${name};
-                    }
-                """.trimIndent()
-                val getter=factory.createMethodFromText(getterContent,extractedClass)
-                extractedClass.add(getter)
-
-                val setterContent=
-                    """
-                        public void set${capitalizedName}(${param.type.canonicalText} ${name}){
-                        this.${name}=${name};
-                        }
-                    """.trimIndent()
-                val setter=factory.createMethodFromText(setterContent,extractedClass)
-                extractedClass.add(setter)
-
-            }
-            println(extractedClass.text)
-
-        }
-        extractedClass.reformat(true)
-
-        val outFile=PsiFileFactory.getInstance(project).createFileFromText("Point.java", JavaLanguage.INSTANCE!!,extractedClass.text)
-        WriteAction.run<Exception>{
-            file.containingDirectory.add(outFile)
-            FileDocumentManager.getInstance().saveAllDocuments()
-        }
-
-
-        println("### finnished class")
-        return extractedClass
-    }
-
-    fun getURI(path: String): String? {
-        try {
-            return "file://" + java.nio.file.Paths.get(input.toPath().toString(), path).toString()
-        } catch (e: Exception) {
-            println("Error while creating path")
-            println(e)
-            return null
-        }
-    }
-    fun commit(project: Project){
-        PsiDocumentManager.getInstance(project).commitAllDocuments()
-        FileDocumentManager.getInstance().saveAllDocuments()
-    }
-    fun getPackageName(file: PsiFile): String {
-        if(file is PsiJavaFile){
-            return (file as PsiJavaFile).packageName
-        }
-        return "org/example";
-    }
-    fun process(dataClumpType:String,project: Project, suggestedClassName: String,classProbablyExisting:Boolean,ep:DataClumpEndpoint,relevantParameters:Set<String>){
-        val man = VirtualFileManager.getInstance()
-        val vFile = man.findFileByUrl(ep.filePath)!!
-        val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
-        val packageName = getPackageName(dataClumpFile)
-        val moveDestination =
-            MyMoveDestination()
-        val dataClumpClass =
-            (dataClumpFile as PsiClassOwner)
-                .classes
-                .filter { it.name == ep.className }
-                .first()
-        if(dataClumpType=="parameters"){
-           
-            val allMethods = dataClumpClass!!.findMethodsByName(ep.methodName!!, false)
-            val method = allMethods[0]
-            var index = 0;
-            val parameterInfos = mutableListOf<ParameterInfoImpl>()
-            for (param in method.parameterList.parameters) {
-                println(param.name)
-                if (param.name in relevantParameters) {
-                    parameterInfos.add(ParameterInfoImpl(index, param.name!!, param.type))
-                    index++
-
-                }
-            }
-
-
-            val descriptor =
-                com.intellij.refactoring.introduceparameterobject.JavaIntroduceParameterObjectClassDescriptor(
-                    suggestedClassName,
-                    packageName,
-                    moveDestination,
-                    classProbablyExisting,
-                    false,
-                    "public",
-                    parameterInfos.toTypedArray(),
-                    method,
-                    true
-                )
-           descriptor.existingClass=dataClumpClass
-            val processor = IntroduceParameterObjectProcessor(allMethods[0], descriptor, parameterInfos, false)
-
-            println("### running")
-            processor.run()
-            nameClassMap[suggestedClassName]=descriptor.existingClass
-        }
-
-        else if(dataClumpType=="fields"){
-
-            val fields = mutableListOf<PsiField>()
-            val members=mutableListOf<MemberInfo>()
-            for (field in dataClumpClass.fields) {
-                println(field.name)
-                if (field.name in relevantParameters) {
-                    fields.add(field)
-                    members.add(MemberInfo(field))
-                }
-            }
-            var extractedClassName=suggestedClassName
-            if(classProbablyExisting){
-                extractedClassName+= System.currentTimeMillis()
-
-            }
-            val extractClassProcessor=ExtractClassProcessor(dataClumpClass,fields,emptyList(),emptyList(),packageName,moveDestination,extractedClassName,"public",true,emptyList(),false)
-            extractClassProcessor.run()
-
-            if(classProbablyExisting){
-                val realClass=nameClassMap[suggestedClassName]!!
-                commit(project)
-                val session=RefreshQueue.getInstance().createSession(false,true){
-
-                }
-                session.launch()
-              val references= ReferencesSearch.search(extractClassProcessor.createdClass, GlobalSearchScope.projectScope(project)).findAll()
-                val refList=references.toList()
-                /*for(r in refList){
-                    val methodParent=r.element.findParentOfType<PsiMethod>()
-                    val fieldParent=r.element.findParentOfType<PsiField>()
-                    val instantiationParent=r.element.findParentOfType<PsiNewExpression>()
-                    val paramParent=r.element.findParentOfType<PsiParameter>()
-                    val variableParent=r.element.findParentOfType<PsiVariable>()
-                    WriteAction.run<IncorrectOperationException>(){
-                        try {
-                            if(instantiationParent!=null){
-                                instantiationParent.classReference!!.replace(realClass)
-                            }
-                            else if(paramParent!=null){
-                                paramParent.typeElement!!.replace(realClass)
-                            }
-                            else if(fieldParent!=null){
-                                fieldParent.typeElement!!.replace(realClass)
-                            }
-                            else if(methodParent!=null){
-                                methodParent.returnTypeElement!!.replace(realClass)
-                            }
-                            else if(variableParent!=null){
-                                variableParent.typeElement!!.replace(realClass)
-                            }
-                        }catch (ex:Exception){
-                            println("test")
-                        }
-
-
-
-                    }
-
-
-                }*/
-            }
-            else{
-                nameClassMap[suggestedClassName]=extractClassProcessor.createdClass
-            }
-        }
-    }
-    class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String) {}
-    val createdClassMap= mutableSetOf<String>()
-    fun introduceParameterObject(project: Project, context: DataClumpTypeContext, suggestedClassName: String) {
-
-        val dataClumpTypeSplitted=context.data_clump_type.split("_")
-        val endpoints = arrayOf(
-            DataClumpEndpoint(
-                getURI(context.from_file_path)!!,
-                context.from_class_or_interface_name,
-                context.from_method_name,
-                dataClumpTypeSplitted[0]
-            ),
-            DataClumpEndpoint(
-                getURI(context.to_file_path)!!,
-                context.to_class_or_interface_name,
-                context.to_method_name,
-                dataClumpTypeSplitted[2]
-            )
-        )
-        
-        var loopedOnce=false
-        for (ep in endpoints) {
-
-                process(ep.dataClumpType,project, suggestedClassName,suggestedClassName in createdClassMap || loopedOnce ,ep,context.data_clump_data.values.map { it.name }.toSet())
-
-
-
-           // PsiDocumentManager.getInstance(project).commitAllDocuments()
-            //FileDocumentManager.getInstance().saveAllDocuments()
-            loopedOnce=true
-
-        }
-        createdClassMap.add(suggestedClassName)
-        com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveAllDocuments()
-
-
-
-    }
-
-    fun getVariableList(project:Project,context: DataClumpTypeContext):List<PsiVariable> {
-        val method=getMethod(project,context)
-        if(method!=null){
-            return method.parameterList.parameters.toList()
-        }
-        else{
-            return emptyList()
-        }
-    }
-    fun getMethod(project: Project,context: DataClumpTypeContext):PsiMethod?{
-        val man=VirtualFileManager.getInstance()
-        val vFile = man.findFileByUrl(getURI(context.from_file_path)!!)!!
-        val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
-        val dataClumpClass =
-            (dataClumpFile as PsiClassOwner)
-                .classes
-                .filter { it.name == context.from_class_or_interface_name }
-                .first()
-        if (context.from_method_key!=null) {
-
-            val allMethods = dataClumpClass!!.findMethodsByName(context.from_method_name!!, false)
-            val method = allMethods[0]
-            return method
-        }
-        return null
-    }
     //https://github.com/JetBrains/intellij-community/blob/cb1f19a78bb9a4db29b33ff186cdb60ceab7f64c/java/java-impl-refactorings/src/com/intellij/refactoring/encapsulateFields/JavaEncapsulateFieldHelper.java#L86
-    fun refactorDataClumpContainingMethod(
-        project: Project,
-        method: PsiMethod,
-        extractedClass: PsiClass,
-        context: DataClumpTypeContext
-    ) {
-        var type:PsiType =
-            JavaPsiFacade.getInstance(project)
-                .getElementFactory()
-                .createType(extractedClass)
-        type=PsiType.BOOLEAN
-        val newlyAdded =
-            PsiElementFactory.getInstance(project)
-                .createParameter(extractedClass.name!!.decapitalize(), type)
-        com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction(project) {
-            method.parameterList.add(newlyAdded)
-        }
-
-
-        com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction(project) {
-            println("### Start refactor method")
-            val relevantParameters = context.data_clump_data.values.map { it.name }.toSet()
-            for (param in method.parameterList.parameters) {
-                println(param.name)
-                val name=param.name!!
-                val capitalizedName=name.replaceFirstChar { Character.toUpperCase(it) }
-                if (param.name in relevantParameters) {
-                    val result=ReferencesSearch.search(param)
-                    for(r in result){
-                        r.bindToElement(newlyAdded.typeElement!!.children.filter { it is PsiVariable &&  it.name=="get"+capitalizedName }.first())
-
-                    }
-                    //println(result.toDistinctTypedArray().size)
-                    param.delete()
-                }
-            }
-            println("### modify method")
-
-            println("### modify method finnished")
-            println(method.isValid())
-            println(method.text)
-           // com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().saveAllDocuments()
-        }
-
-    }
-
     val methodParameterDCTest =
     """
     {
@@ -585,12 +265,9 @@ class DataClumpRefactorer : CliktCommand() {
 
         }
         session.launch()
-        introduceParameterObject(project,suggestedNameWithDataClumpContext.context,suggestedNameWithDataClumpContext.suggestedName)
-        //PsiDocumentManager.getInstance(project).commitAllDocuments()
-        //FileDocumentManager.getInstance().saveAllDocuments()
-            //val extractedClass=createExtractedClass(project,suggestedNameWithDataClumpContext.suggestedName,suggestedNameWithDataClumpContext.context,getVariableList(project,suggestedNameWithDataClumpContext.context))
-            //refactorDataClumpContainingMethod(project,getMethod(project,suggestedNameWithDataClumpContext.context)!!,extractedClass!!,suggestedNameWithDataClumpContext.context)
-
+        val refactorer= dataClumpRefactoring.DataClumpRefactorer(input)
+        refactorer.refactorDataClump(project,suggestedNameWithDataClumpContext)
+        refactorer.commit(project)
 
         println("### finnished refactor")
 

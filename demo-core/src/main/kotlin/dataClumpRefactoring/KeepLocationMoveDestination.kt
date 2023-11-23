@@ -1,4 +1,4 @@
-package org.jetbrains.research.refactoringDemoPlugin
+package dataClumpRefactoring
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
@@ -11,7 +11,7 @@ import com.intellij.refactoring.PackageWrapper
 import com.intellij.usageView.UsageInfo
 import com.intellij.util.containers.MultiMap
 
-class MyMoveDestination: MoveDestination {
+class KeepLocationMoveDestination: MoveDestination {
     override fun getTargetDirectory(source: PsiDirectory?): PsiDirectory {
         return source!!
     }

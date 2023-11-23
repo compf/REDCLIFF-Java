@@ -1,4 +1,4 @@
-package org.jetbrains.research.refactoringDemoPlugin
+package dataClumpRefactoring
 
 data class DataClumpTypeContext(
     val type: String,
