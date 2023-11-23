@@ -35,7 +35,12 @@ import com.intellij.openapi.vfs.newvfs.RefreshQueue
 import com.intellij.psi.impl.file.PsiDirectoryFactory
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.extractclass.ExtractClassProcessor
+import com.intellij.refactoring.memberPullUp.PullUpProcessor
+import com.intellij.refactoring.move.moveMembers.MoveMembersProcessor
 import com.intellij.refactoring.suggested.startOffset
+import com.intellij.refactoring.util.DocCommentPolicy
+import com.intellij.refactoring.util.classMembers.MemberInfo
+import io.ktor.util.date.*
 import org.jetbrains.kotlin.idea.base.util.reformat
 import org.jetbrains.kotlin.idea.gradleTooling.get
 import org.jetbrains.kotlin.load.java.sources.JavaSourceElementFactory
@@ -137,17 +142,19 @@ class DataClumpRefactorer : CliktCommand() {
         }
         return "javatest";
     }
-    fun process(dataClumpType:DataClumpType,project: Project, suggestedClassName: String,loopedOnce:Boolean,ep:DataClumpEndpoint,relevantParameters:Set<String>){
+    fun process(dataClumpType:String,project: Project, suggestedClassName: String,classProbablyExisting:Boolean,ep:DataClumpEndpoint,relevantParameters:Set<String>){
         val man = VirtualFileManager.getInstance()
         val vFile = man.findFileByUrl(ep.filePath)!!
         val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
         val packageName = getPackageName(dataClumpFile)
+        val moveDestination =
+            MyMoveDestination()
         val dataClumpClass =
             (dataClumpFile as PsiClassOwner)
                 .classes
                 .filter { it.name == ep.className }
                 .first()
-        if(dataClumpType==DataClumpType.Parameter){
+        if(dataClumpType=="parameters"){
            
             val allMethods = dataClumpClass!!.findMethodsByName(ep.methodName!!, false)
             val method = allMethods[0]
@@ -162,14 +169,13 @@ class DataClumpRefactorer : CliktCommand() {
                 }
             }
 
-            val moveDestination =
-                MyMoveDestination()
+
             val descriptor =
                 com.intellij.refactoring.introduceparameterobject.JavaIntroduceParameterObjectClassDescriptor(
                     suggestedClassName,
                     packageName,
                     moveDestination,
-                    suggestedClassName in createdClassMap || loopedOnce,
+                    classProbablyExisting,
                     false,
                     "public",
                     parameterInfos.toTypedArray(),
@@ -181,48 +187,61 @@ class DataClumpRefactorer : CliktCommand() {
 
             println("### running")
             processor.run()
+            nameClassMap[suggestedClassName]=descriptor.existingClass
         }
-        else if(dataClumpType==DataClumpType.Field){
-            val moveDestination =
-            JavaRefactoringFactory.getInstance(project).createSourceFolderPreservingMoveDestination(packageName)
+
+        else if(dataClumpType=="fields"){
+
             val fields = mutableListOf<PsiField>()
+            val members=mutableListOf<MemberInfo>()
             for (field in dataClumpClass.fields) {
                 println(field.name)
                 if (field.name in relevantParameters) {
                     fields.add(field)
+                    members.add(MemberInfo(field))
                 }
             }
-            val processor=ExtractClassProcessor(dataClumpClass,fields,emptyList(),emptyList(),packageName,moveDestination,suggestedClassName,"public",true,emptyList(),false)
-            processor.run()
+            var extractedClassName=suggestedClassName
+            if(classProbablyExisting){
+                extractedClassName+= System.currentTimeMillis()
+
+            }
+            val extractClassProcessor=ExtractClassProcessor(dataClumpClass,fields,emptyList(),emptyList(),packageName,moveDestination,extractedClassName,"public",true,emptyList(),false)
+            extractClassProcessor.run()
+
+            if(classProbablyExisting){
+                val moveUpProcessor=PullUpProcessor(extractClassProcessor.createdClass,nameClassMap[suggestedClassName],members.toTypedArray(),null)
+                moveUpProcessor.run()
+            }
+            else{
+                nameClassMap[suggestedClassName]=extractClassProcessor.createdClass
+            }
         }
     }
-    class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?) {}
+    class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String) {}
     val createdClassMap= mutableSetOf<String>()
     fun introduceParameterObject(project: Project, context: DataClumpTypeContext, suggestedClassName: String) {
 
-        
+        val dataClumpTypeSplitted=context.data_clump_type.split("_")
         val endpoints = arrayOf(
             DataClumpEndpoint(
                 getURI(context.from_file_path)!!,
                 context.from_class_or_interface_name,
-                context.from_method_name!!
+                context.from_method_name,
+                dataClumpTypeSplitted[0]
             ),
             DataClumpEndpoint(
                 getURI(context.to_file_path)!!,
                 context.to_class_or_interface_name,
-                context.to_method_name!!
+                context.to_method_name,
+                dataClumpTypeSplitted[2]
             )
         )
         
         var loopedOnce=false
         for (ep in endpoints) {
 
-            var type = DataClumpType.Parameter
-            if(ep.methodName==null){
-                type=DataClumpType.Field
-            }
-
-                process(type,project, suggestedClassName,loopedOnce,ep,context.data_clump_data.values.map { it.name }.toSet())
+                process(ep.dataClumpType,project, suggestedClassName,suggestedClassName in createdClassMap || loopedOnce ,ep,context.data_clump_data.values.map { it.name }.toSet())
 
 
 
@@ -311,7 +330,7 @@ class DataClumpRefactorer : CliktCommand() {
 
     }
 
-    val testJSON =
+    val methodParameterDCTest =
     """
     {
     'suggestedName':'Point',
@@ -410,6 +429,102 @@ class DataClumpRefactorer : CliktCommand() {
     }
 }
     """
+    val fieldDCTest =
+        """
+    {
+    'suggestedName':'Point',
+    'context':{
+        'type':'data_clump',
+        'key':'parameters_to_parameters_data_clump-lib/src/main/java/javatest/MathStuff.java-javatest.MathStuff/method/printLength(int x, int y, int z)-javatest.MathStuff/method/printMax(int x, int y, int z)-xyz',
+        'probability':1,
+        'from_file_path':'src/main/java/javatest/MathStuff.java'
+        ,'from_class_or_interface_name':'MathStuff'
+        ,'from_class_or_interface_key':'javatest.MathStuff',
+        'to_file_path':'src/main/java/javatest/Library.java',
+        'to_class_or_interface_name':'Library',
+        to_class_or_interface_key':'javatest.Library',
+   
+        'data_clump_type':'fields_to_fields_data_clump',
+        'data_clump_data':{
+            'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x':{
+                'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/x',
+                'name':'sign',
+                'type':'boolean',
+                'probability':1,
+                'modifiers':[],
+                'to_variable':{
+                    'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/x',
+                    'name':'sign',
+                    'type':'boolean',
+                    'modifiers':[],
+                    'position':{
+                        'startLine':13,'
+                        startColumn':30,
+                        'endLine':13,
+                        'endColumn':31
+                    }
+                },
+                'position':{
+                    'startLine':5,
+                    'startColumn':33,
+                    'endLine':5,
+                    'endColumn':34
+                }
+            },
+            'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y':{
+                'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/y',
+                'name':'mantissa',
+                'type':'double',
+                'probability':1,
+                'modifiers':[],
+                'to_variable':{
+                    'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/y',
+                    'name':'mantissa',
+                    'type':'double',
+                    'modifiers':[],
+                    'position':{
+                        'startLine':13,
+                        'startColumn':37,
+                        'endLine':13,
+                        'endColumn':38
+                    }
+                },
+                'position':{
+                    'startLine':5,
+                    'startColumn':40,
+                    'endLine':5,
+                    'endColumn':41
+                }
+            },
+            'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z':{
+                'key':'javatest.MathStuff/method/printLength(int x, int y, int z)/parameter/z',
+                'name':'exponent',
+                'type':'int',
+                'probability':1,
+                'modifiers':[],
+                'to_variable':{
+                    'key':'javatest.MathStuff/method/printMax(int x, int y, int z)/parameter/z',
+                    'name':'exponent',
+                    'type':'int',
+                    'modifiers':[],
+                    'position':{
+                        'startLine':13,
+                        'startColumn':44,
+                        'endLine':13,
+                        'endColumn':45
+                    }
+                },
+                'position':{
+                    'startLine':5,
+                    'startColumn':47,
+                    'endLine':5,
+                    'endColumn':48
+                }
+            }
+        }
+    }
+}
+    """
 
     override fun run() {
 
@@ -418,7 +533,7 @@ class DataClumpRefactorer : CliktCommand() {
         val project = projectManager.loadAndOpenProject(input.toPath().toString())!!
         PsiManager.getInstance(project).dropPsiCaches()
         val suggestedNameWithDataClumpContext =
-            Gson().fromJson<SuggestedNameWithDataClumpTypeContext>(testJSON, SuggestedNameWithDataClumpTypeContext::class.java)
+            Gson().fromJson<SuggestedNameWithDataClumpTypeContext>(fieldDCTest, SuggestedNameWithDataClumpTypeContext::class.java)
             println("### Start refactor")
         val session=RefreshQueue.getInstance().createSession(false,true){
 
