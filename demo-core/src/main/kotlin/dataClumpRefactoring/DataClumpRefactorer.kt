@@ -26,7 +26,7 @@ class DataClumpRefactorer(private val projectPath:File) {
     fun refactorDataClump(project:Project,suggestedNameWithDataClumpTypeContext: SuggestedNameWithDataClumpTypeContext){
         val context=suggestedNameWithDataClumpTypeContext.context
         val suggestedClassName=suggestedNameWithDataClumpTypeContext.suggestedName
-        val dataClumpTypeSplitted=context.data_clump_type.split("_")
+        val dataClumpTypeSplitted=context.data_clump_type.toString().split("_")
         val endpoints = arrayOf(
             DataClumpEndpoint(
                 getURI(context.from_file_path)!!,

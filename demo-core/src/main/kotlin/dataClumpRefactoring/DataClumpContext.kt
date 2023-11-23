@@ -14,7 +14,7 @@ data class DataClumpTypeContext(
     val to_class_or_interface_key: String,
     val to_method_name: String?,
     val to_method_key: String?,
-    val data_clump_type: String,
+    val data_clump_type: DataClumpType,
     val data_clump_type_additional: Map<String, Any>? = null,
     val data_clump_data: Map<String, DataClumpsVariableFromContext>
 )
@@ -47,7 +47,7 @@ data class SuggestedNameWithDataClumpTypeContext(
     val suggestedName: String,
     val context: DataClumpTypeContext
 )
-
-val  fields_to_fields_data_clump="fields_to_fields_data_clump"
-val parameters_to_fields_data_clump="parameters_to_fields_data_clump"
-val parameters_to_parameters_data_clump="parameters_to_parameters_data_clump"
+enum class DataClumpType{
+  fields_to_fields_data_clump,
+ parameters_to_fields_data_clump,
+ parameters_to_parameters_data_clump}
