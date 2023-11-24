@@ -267,7 +267,7 @@ class DataClumpRefactorer : CliktCommand() {
         session.launch()
         val refactorer= dataClumpRefactoring.DataClumpRefactorer(input)
         refactorer.refactorDataClump(project,suggestedNameWithDataClumpContext)
-        refactorer.commit(project)
+        refactorer.commit(project, "file://"+input.absolutePath)
 
         println("### finnished refactor")
 
@@ -294,6 +294,7 @@ class DataClumpRefactorer : CliktCommand() {
         println("### saving")
         //PsiDocumentManager.getInstance(project).commitAllDocuments()
         println("### exiting")
+        Thread.sleep(10*1000)
         exitProcess(0)
     }
 }

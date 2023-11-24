@@ -4,13 +4,17 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.RefreshQueue
 import com.intellij.psi.*
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.changeSignature.ParameterInfoImpl
 import com.intellij.refactoring.extractclass.ExtractClassProcessor
 import com.intellij.refactoring.introduceParameterObject.IntroduceParameterObjectProcessor
+import com.intellij.refactoring.introduceparameterobject.JavaIntroduceParameterObjectClassDescriptor
 import com.intellij.refactoring.util.classMembers.MemberInfo
 import java.io.File
+
 class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String) {}
 
 class DataClumpRefactorer(private val projectPath:File) {
@@ -47,6 +51,7 @@ class DataClumpRefactorer(private val projectPath:File) {
 
             refactorDataClumpEndpoint(ep.dataClumpType,project, suggestedClassName,suggestedClassName in nameClassMap || loopedOnce ,ep,context.data_clump_data.values.map { it.name }.toSet())
             loopedOnce=true
+            commit(project,ep.filePath)
 
         }
         FileDocumentManager.getInstance().saveAllDocuments()
@@ -68,9 +73,15 @@ class DataClumpRefactorer(private val projectPath:File) {
         }
         return "org/example";
     }
-    fun commit(project: Project){
+    fun commit(project: Project,dir:VirtualFile){
+        VfsUtil.markDirtyAndRefresh(true, true, true, dir)
         PsiDocumentManager.getInstance(project).commitAllDocuments()
         FileDocumentManager.getInstance().saveAllDocuments()
+    }
+    fun commit(project:Project,uri:String){
+        val man = VirtualFileManager.getInstance()
+        val dir = man.findFileByUrl(uri)!!.parent
+        commit(project,dir)
     }
 
     private fun refactorDataClumpEndpoint(dataClumpType:String,project: Project, suggestedClassName: String,classProbablyExisting:Boolean,ep:DataClumpEndpoint,relevantParameters:Set<String>){
@@ -100,20 +111,25 @@ class DataClumpRefactorer(private val projectPath:File) {
                 }
             }
 
+            val descriptor:JavaIntroduceParameterObjectClassDescriptor;
+                if(classProbablyExisting){
+                    descriptor=JavaKeepExistingClassIntroduceParameterObjectDescriptor(packageName,moveDestination,nameClassMap[suggestedClassName]!!,false,"public",parameterInfos.toTypedArray(),method,true)
+                }else{
+                    descriptor= JavaIntroduceParameterObjectClassDescriptor(
+                        suggestedClassName,
+                        packageName,
+                        moveDestination,
+                        classProbablyExisting,
+                        false,
+                        "public",
+                        parameterInfos.toTypedArray(),
+                        method,
+                        true
+                    )
+                    descriptor.existingClass=dataClumpClass
+                }
 
-            val descriptor =
-                com.intellij.refactoring.introduceparameterobject.JavaIntroduceParameterObjectClassDescriptor(
-                    suggestedClassName,
-                    packageName,
-                    moveDestination,
-                    classProbablyExisting,
-                    false,
-                    "public",
-                    parameterInfos.toTypedArray(),
-                    method,
-                    true
-                )
-            descriptor.existingClass=dataClumpClass
+
             val processor = IntroduceParameterObjectProcessor(allMethods[0], descriptor, parameterInfos, false)
 
             println("### running")
@@ -142,7 +158,7 @@ class DataClumpRefactorer(private val projectPath:File) {
 
             if(classProbablyExisting){
                 val realClass=nameClassMap[suggestedClassName]!!
-                commit(project)
+                commit(project,ep.filePath)
                 val session= RefreshQueue.getInstance().createSession(false,true){
 
                 }
