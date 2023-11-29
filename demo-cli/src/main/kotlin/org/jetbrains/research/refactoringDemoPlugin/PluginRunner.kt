@@ -31,6 +31,7 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.extractclass.ExtractClassProcessor
 import com.intellij.refactoring.util.classMembers.MemberInfo
+import dataClumpRefactoring.DataClumpFinder
 import dataClumpRefactoring.DataClumpTypeContext
 import dataClumpRefactoring.KeepLocationMoveDestination
 import dataClumpRefactoring.SuggestedNameWithDataClumpTypeContext
@@ -46,7 +47,23 @@ object PluginRunner : ApplicationStarter {
         get() = ApplicationStarter.ANY_MODALITY
 
     override fun main(args: List<String>) {
-        DataClumpRefactorer().main(args.drop(1))
+        DataClumpFinderRunner().main(args.drop(1))
+    }
+}
+class DataClumpFinderRunner :CliktCommand(){
+    private val input by
+    argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
+    private val output by argument(help = "Output directory").file(canBeFile = true)
+    override fun run(){
+        VirtualFileManager.getInstance().syncRefresh()
+        val projectManager = ProjectManager.getInstance()
+        val project = projectManager.loadAndOpenProject(input.toPath().toString())!!
+        val finder= DataClumpFinder(project)
+        val context=finder.run()
+       val json= Gson().toJson(context)
+        java.nio.file.Files.writeString(output.toPath(),json)
+        exitProcess(0)
+
     }
 }
 

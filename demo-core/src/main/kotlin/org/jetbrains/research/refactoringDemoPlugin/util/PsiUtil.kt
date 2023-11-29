@@ -9,8 +9,26 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.*
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.util.PsiTreeUtil
+import org.jetbrains.kotlin.idea.hierarchy.overrides.isOverrideHierarchyElement
 import org.jetbrains.kotlin.psi.KtFile
+fun  Project.getAllRelevantVariables(minSize:Int):ArrayList<List<PsiVariable>>{
+    val result=ArrayList<List<PsiVariable>>()
+    val classes=extractKotlinAndJavaClasses()
+    for(cls in classes){
+        if(cls.fields.size>=minSize){
+            result.add( cls.fields.toList())
+        }
 
+        for(method in cls.methods){
+            if(method.parameterList.parameters.size>=minSize){
+                result.add( method.parameterList.parameters.toList())
+            }
+
+
+        }
+    }
+    return result
+}
 /*
     Extracts all Kotlin and Java classes from the project.
  */
@@ -27,8 +45,11 @@ fun Project.extractPsiFiles(filePredicate: (VirtualFile) -> Boolean): MutableSet
     val projectPsiFiles = mutableSetOf<PsiFile>()
     val projectRootManager = ProjectRootManager.getInstance(this)
     val psiManager = PsiManager.getInstance(this)
-
-    projectRootManager.contentRoots.mapNotNull { root ->
+    var root=projectRootManager.contentRoots
+    if(root.isEmpty()){
+        root= arrayOf(this.projectFile)
+    }
+    root.mapNotNull { root ->
         VfsUtilCore.iterateChildrenRecursively(root, null) { virtualFile ->
             if (!filePredicate(virtualFile) || virtualFile.canonicalPath == null) {
                 return@iterateChildrenRecursively true
