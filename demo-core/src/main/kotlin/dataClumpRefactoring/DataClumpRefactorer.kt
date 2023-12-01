@@ -13,8 +13,13 @@ import com.intellij.refactoring.extractclass.ExtractClassProcessor
 import com.intellij.refactoring.introduceParameterObject.IntroduceParameterObjectProcessor
 import com.intellij.refactoring.introduceparameterobject.JavaIntroduceParameterObjectClassDescriptor
 import com.intellij.refactoring.util.classMembers.MemberInfo
+import org.jetbrains.research.refactoringDemoPlugin.util.extractKotlinAndJavaClasses
 import java.io.File
-
+import com.intellij.openapi.project.DumbService
+import com.intellij.openapi.application.ApplicationManager
+import org.jetbrains.kotlin.lombok.utils.decapitalize
+import com.intellij.openapi.application.WriteAction
+import com.intellij.util.IncorrectOperationException
 class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String) {}
 
 class DataClumpRefactorer(private val projectPath:File) {
@@ -82,6 +87,37 @@ class DataClumpRefactorer(private val projectPath:File) {
         val man = VirtualFileManager.getInstance()
         val dir = man.findFileByUrl(uri)!!.parent
         commit(project,dir)
+    }
+    fun waitForIndexing(project: Project) {
+        ApplicationManager.getApplication().invokeAndWait {
+            while (DumbService.getInstance(project).isDumb) {
+                try {
+                    Thread.sleep(100)
+                } catch (e: InterruptedException) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+    fun replaceClassOccurences(project: Project,oldClassName:String,newClassName:String)
+    {
+        val lowerCaseOld=oldClassName.decapitalize()
+        val lowerCaseNew=newClassName.decapitalize()
+       for(cls in project.extractKotlinAndJavaClasses()){
+           println(cls)
+           var text=java.nio.file.Files.readString(cls.containingFile.virtualFile.toNioPath())
+           text=text.replace(oldClassName,newClassName).replace(lowerCaseOld,lowerCaseNew)
+              java.nio.file.Files.writeString(cls.containingFile.virtualFile.toNioPath(),text)
+           if(cls.name==oldClassName){
+              java.nio.file.Files.delete(cls.containingFile.virtualFile.toNioPath())
+           }
+
+
+       }
+        val session= RefreshQueue.getInstance().createSession(false,true){
+
+        }
+        session.launch()
     }
 
     private fun refactorDataClumpEndpoint(dataClumpType:String,project: Project, suggestedClassName: String,classProbablyExisting:Boolean,ep:DataClumpEndpoint,relevantParameters:Set<String>){
@@ -157,46 +193,52 @@ class DataClumpRefactorer(private val projectPath:File) {
             extractClassProcessor.run()
 
             if(classProbablyExisting){
-                val realClass=nameClassMap[suggestedClassName]!!
                 commit(project,ep.filePath)
-                val session= RefreshQueue.getInstance().createSession(false,true){
+               replaceClassOccurences(project,extractClassProcessor.createdClass.name!!,suggestedClassName)
+                /* val realClass=nameClassMap[suggestedClassName]!!
+                 commit(project,ep.filePath)
+                 val session= RefreshQueue.getInstance().createSession(false,true){
 
-                }
-                session.launch()
-                val references= ReferencesSearch.search(extractClassProcessor.createdClass, GlobalSearchScope.projectScope(project)).findAll()
-                /*for(r in refList){
-                    val methodParent=r.element.findParentOfType<PsiMethod>()
-                    val fieldParent=r.element.findParentOfType<PsiField>()
-                    val instantiationParent=r.element.findParentOfType<PsiNewExpression>()
-                    val paramParent=r.element.findParentOfType<PsiParameter>()
-                    val variableParent=r.element.findParentOfType<PsiVariable>()
-                    WriteAction.run<IncorrectOperationException>(){
-                        try {
-                            if(instantiationParent!=null){
-                                instantiationParent.classReference!!.replace(realClass)
-                            }
-                            else if(paramParent!=null){
-                                paramParent.typeElement!!.replace(realClass)
-                            }
-                            else if(fieldParent!=null){
-                                fieldParent.typeElement!!.replace(realClass)
-                            }
-                            else if(methodParent!=null){
-                                methodParent.returnTypeElement!!.replace(realClass)
-                            }
-                            else if(variableParent!=null){
-                                variableParent.typeElement!!.replace(realClass)
-                            }
-                        }catch (ex:Exception){
-                            println("test")
-                        }
+                 }
+                 session.launch()
+                waitForIndexing(project)
+                 val allClasses=project.extractKotlinAndJavaClasses()
+                 val references= ReferencesSearch.search(extractClassProcessor.createdClass, GlobalSearchScope.allScope(project)).findAll()
+                 val references2= ReferencesSearch.search(allClasses[2], GlobalSearchScope.allScope(project)).findAll()
+                 val hallo=5
+                 for(r in refList){
+                     val methodParent=r.element.findParentOfType<PsiMethod>()
+                     val fieldParent=r.element.findParentOfType<PsiField>()
+                     val instantiationParent=r.element.findParentOfType<PsiNewExpression>()
+                     val paramParent=r.element.findParentOfType<PsiParameter>()
+                     val variableParent=r.element.findParentOfType<PsiVariable>()
+                     WriteAction.run<IncorrectOperationException>(){
+                         try {
+                             if(instantiationParent!=null){
+                                 instantiationParent.classReference!!.replace(realClass)
+                             }
+                             else if(paramParent!=null){
+                                 paramParent.typeElement!!.replace(realClass)
+                             }
+                             else if(fieldParent!=null){
+                                 fieldParent.typeElement!!.replace(realClass)
+                             }
+                             else if(methodParent!=null){
+                                 methodParent.returnTypeElement!!.replace(realClass)
+                             }
+                             else if(variableParent!=null){
+                                 variableParent.typeElement!!.replace(realClass)
+                             }
+                         }catch (ex:Exception){
+                             println("test")
+                         }
 
 
 
-                    }
+                     }
 
 
-                }*/
+                 }*/
             }
             else{
                 nameClassMap[suggestedClassName]=extractClassProcessor.createdClass

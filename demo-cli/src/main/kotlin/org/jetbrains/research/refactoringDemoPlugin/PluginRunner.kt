@@ -47,7 +47,7 @@ object PluginRunner : ApplicationStarter {
         get() = ApplicationStarter.ANY_MODALITY
 
     override fun main(args: List<String>) {
-        DataClumpFinderRunner().main(args.drop(1))
+        DataClumpRefactorer().main(args.drop(1))
     }
 }
 class DataClumpFinderRunner :CliktCommand(){
