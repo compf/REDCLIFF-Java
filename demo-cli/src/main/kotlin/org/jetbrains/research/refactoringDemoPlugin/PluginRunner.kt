@@ -276,13 +276,13 @@ class DataClumpRefactorer : CliktCommand() {
         val project = projectManager.loadAndOpenProject(input.toPath().toString())!!
         PsiManager.getInstance(project).dropPsiCaches()
         val suggestedNameWithDataClumpContext =
-            Gson().fromJson<SuggestedNameWithDataClumpTypeContext>(fieldDCTest, SuggestedNameWithDataClumpTypeContext::class.java)
+            Gson().fromJson<SuggestedNameWithDataClumpTypeContext>(methodParameterDCTest, SuggestedNameWithDataClumpTypeContext::class.java)
             println("### Start refactor")
         val session=RefreshQueue.getInstance().createSession(false,true){
 
         }
         session.launch()
-        val refactorer= dataClumpRefactoring.DataClumpRefactorer(input)
+        val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(input)
         refactorer.refactorDataClump(project,suggestedNameWithDataClumpContext)
         refactorer.commit(project, "file://"+input.absolutePath)
 
