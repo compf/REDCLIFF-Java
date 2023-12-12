@@ -114,7 +114,7 @@ class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(project
                         (element.parent as PsiAssignmentExpression).rExpression?.replace(getterCall)
                     }
                 }
-                else if (element is PsiReferenceExpression) {
+                else  {
                     val parent = element.parent
                     WriteCommandAction.runWriteCommandAction(project){
                         usage.element.replace(getterCall)
@@ -122,6 +122,7 @@ class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(project
 
                     print(parent)
                 }
+                commitAll(project)
             }
         }
 
