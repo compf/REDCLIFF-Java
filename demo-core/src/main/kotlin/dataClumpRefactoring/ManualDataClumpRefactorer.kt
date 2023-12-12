@@ -16,10 +16,17 @@ import com.intellij.refactoring.util.classMembers.MemberInfo
 import org.jetbrains.research.refactoringDemoPlugin.util.extractKotlinAndJavaClasses
 import  com.intellij.openapi.application.WriteAction
 import com.intellij.ide.fileTemplates.JavaTemplateUtil;
+import com.intellij.lang.Language
 import org.jetbrains.kotlin.psi.psiUtil.findDescendantOfType
 import com.intellij.openapi.command.WriteCommandAction;
 import java.io.File
-
+import com.intellij.openapi.project.DumbService;
+import com.intellij.psi.search.searches.OverridingMethodsSearch;
+import com.intellij.psi.search.searches.MethodReferencesSearch;
+import org.jetbrains.kotlin.resolve.calls.util.asCallableReferenceExpression
+import org.jetbrains.kotlin.resolve.calls.util.isCallableReference
+import kotlin.system.exitProcess
+import com.intellij.refactoring.changeSignature.*;
 class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(projectPath) {
     fun createClass(
         project: Project,
@@ -96,7 +103,11 @@ class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(project
             method.parameterList.add(parameter)
         }
 
+
+
         updateParameterUsages(project,method,extractedClass,parameter,relevantVariables)
+        updateMethodUsages(project,method,extractedClass,relevantVariables)
+
     }
     fun updateParameterUsages(project: Project,method:PsiMethod,extractedClass: PsiClass,parameter:PsiParameter,relevantParameters: List<PsiVariable>){
         for(param in relevantParameters){
@@ -128,7 +139,25 @@ class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(project
 
     }
 
+    fun updateMethodUsages(project:Project,method: PsiMethod,extractedClass: PsiClass,relevantVariables: List<PsiVariable>){
+        waitForIndexing(project)
 
+        val usages = ReferencesSearch.search(method,GlobalSearchScope.allScope(method.project),false).findAll()
+        val params=method.parameterList
+        val usages2=OverridingMethodsSearch.search(method,GlobalSearchScope.allScope(method.project),true).findAll()
+
+        val dumb= DumbService.getInstance(project).isDumb()
+        val ref=  method.references.size
+        for(usage in usages){
+            val element=usage
+            if(element is PsiMethodCallExpression){
+               println(element)
+
+            }
+        }
+
+
+    }
     override fun refactorDataClumpEndpoint(
         dataClumpType: String,
         project: Project,
@@ -151,6 +180,7 @@ class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(project
                 dataClumpFile.parent!!,
                 packageName,
                methodData._3)
+
             addExtractedClassParameter(project,methodData._1,extractedClass,methodData._3)
 
         } else {
