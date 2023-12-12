@@ -89,6 +89,43 @@ class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(project
     fun findClass(className: String): PsiClass {
         return nameClassMap[className]!!
     }
+    fun addExtractedClassParameter(project: Project,method:PsiMethod,extractedClass: PsiClass,relevantVariables: List<PsiVariable>){
+        val type=JavaPsiFacade.getElementFactory(method.project).createType(extractedClass)
+        val parameter = JavaPsiFacade.getElementFactory(method.project).createParameter(extractedClass.name!!.replaceFirstChar { it.lowercase() }, type)
+        WriteCommandAction.runWriteCommandAction(project){
+            method.parameterList.add(parameter)
+        }
+
+        updateParameterUsages(project,method,extractedClass,parameter,relevantVariables)
+    }
+    fun updateParameterUsages(project: Project,method:PsiMethod,extractedClass: PsiClass,parameter:PsiParameter,relevantParameters: List<PsiVariable>){
+        for(param in relevantParameters){
+            val getterCall=JavaPsiFacade.getElementFactory(method.project).createExpressionFromText("${parameter.name}.get${param.name!!.replaceFirstChar { it.uppercase() }}()",method)
+            val usages = ReferencesSearch.search(param,method.resolveScope).findAll()
+            for (usage in usages) {
+                val element = usage.element
+                if(element.parent is PsiAssignmentExpression && (element.parent as PsiAssignmentExpression).lExpression==element) {
+                    WriteCommandAction.runWriteCommandAction(project) {
+                        var setterCall = JavaPsiFacade.getElementFactory(method.project).createExpressionFromText(
+                            "${parameter.name}.set${param.name!!.replaceFirstChar { it.uppercase() }}(${(element.parent as PsiAssignmentExpression).rExpression!!.text})",
+                            method
+                        )
+                        element.parent.replace(setterCall)
+                        (element.parent as PsiAssignmentExpression).rExpression?.replace(getterCall)
+                    }
+                }
+                else if (element is PsiReferenceExpression) {
+                    val parent = element.parent
+                    WriteCommandAction.runWriteCommandAction(project){
+                        usage.element.replace(getterCall)
+                    }
+
+                    print(parent)
+                }
+            }
+        }
+
+    }
 
 
     override fun refactorDataClumpEndpoint(
@@ -113,6 +150,7 @@ class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(project
                 dataClumpFile.parent!!,
                 packageName,
                methodData._3)
+            addExtractedClassParameter(project,methodData._1,extractedClass,methodData._3)
 
         } else {
 
