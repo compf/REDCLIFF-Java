@@ -127,8 +127,11 @@ open class DataClumpRefactorer(private val projectPath:File) {
         session.launch()
     }
     protected fun getMethodAndParamsToRefactor(dataClumpClass:PsiClass?,methodName:String,relevantParameters:Set<String>): Tuple3<PsiMethod, List<ParameterInfoImpl>, List<PsiParameter>> {
-        val allMethods = dataClumpClass!!.findMethodsByName(methodName, false)
+
+            val allMethods = dataClumpClass!!.findMethodsByName(methodName, false)
         val method = allMethods[0]
+
+        val allParams=method.parameterList.parameters
         var index = 0;
         val parameters=mutableListOf<PsiParameter>()
         val parameterInfos = mutableListOf<ParameterInfoImpl>()
@@ -211,7 +214,7 @@ open class DataClumpRefactorer(private val projectPath:File) {
 
             if(classProbablyExisting){
                 commit(project,ep.filePath)
-               replaceClassOccurences(project,extractClassProcessor.createdClass.name!!,suggestedClassName)
+               //replaceClassOccurences(project,extractClassProcessor.createdClass.name!!,suggestedClassName)
                 val realClass=nameClassMap[suggestedClassName]!!
                  commit(project,ep.filePath)
                  val session= RefreshQueue.getInstance().createSession(false,true){

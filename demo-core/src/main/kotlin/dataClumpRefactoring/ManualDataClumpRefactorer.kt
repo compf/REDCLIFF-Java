@@ -96,21 +96,27 @@ class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(project
     fun findClass(className: String): PsiClass {
         return nameClassMap[className]!!
     }
-    fun addExtractedClassParameter(project: Project,method:PsiMethod,extractedClass: PsiClass,relevantVariables: List<PsiVariable>){
-        val type=JavaPsiFacade.getElementFactory(method.project).createType(extractedClass)
-        val parameter = JavaPsiFacade.getElementFactory(method.project).createParameter(extractedClass.name!!.replaceFirstChar { it.lowercase() }, type)
-        WriteCommandAction.runWriteCommandAction(project){
-            method.parameterList.add(parameter)
+    fun addExtractedClassParameter(project: Project,dataClumpMethod:PsiMethod,extractedClass: PsiClass,relevantVariables: Set<String>){
+        val methodUsagesAndoVerrides=collectMethodUsages(project,dataClumpMethod)
+        for(method in methodUsagesAndoVerrides.second){
+            val type=JavaPsiFacade.getElementFactory(method.project).createType(extractedClass)
+            val parameter = JavaPsiFacade.getElementFactory(method.project).createParameter(extractedClass.name!!.replaceFirstChar { it.lowercase() }, type)
+            WriteCommandAction.runWriteCommandAction(project){
+                method.parameterList.add(parameter)
+            }
+            updateParameterUsages(project,method,extractedClass,parameter,relevantVariables)
+            updateMethodUsages(project,method,extractedClass,relevantVariables)
         }
 
 
 
-        updateParameterUsages(project,method,extractedClass,parameter,relevantVariables)
-        updateMethodUsages(project,method,extractedClass,relevantVariables)
+
+
+
 
     }
-    fun updateParameterUsages(project: Project,method:PsiMethod,extractedClass: PsiClass,parameter:PsiParameter,relevantParameters: List<PsiVariable>){
-        for(param in relevantParameters){
+    fun updateParameterUsages(project: Project,method:PsiMethod,extractedClass: PsiClass,parameter:PsiParameter,relevantParameterNames: Set<String>){
+        for(param in method.parameterList.parameters.filter { relevantParameterNames.contains(it.name) }){
             val getterCall=JavaPsiFacade.getElementFactory(method.project).createExpressionFromText("${parameter.name}.get${param.name!!.replaceFirstChar { it.uppercase() }}()",method)
             val usages = ReferencesSearch.search(param,method.resolveScope).findAll()
             for (usage in usages) {
@@ -139,22 +145,18 @@ class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(project
 
     }
 
-    fun updateMethodUsages(project:Project,method: PsiMethod,extractedClass: PsiClass,relevantVariables: List<PsiVariable>){
+    fun collectMethodUsages(project:Project,method: PsiMethod):Pair<Iterable<PsiReference>,Iterable<PsiMethod>>{
         waitForIndexing(project)
 
-        val usages = ReferencesSearch.search(method,GlobalSearchScope.allScope(method.project),false).findAll()
-        val params=method.parameterList
-        val usages2=OverridingMethodsSearch.search(method,GlobalSearchScope.allScope(method.project),true).findAll()
+        val methodUsages = ReferencesSearch.search(method,GlobalSearchScope.allScope(method.project),true).findAll()
+        val overrides=OverridingMethodsSearch.search(method,GlobalSearchScope.allScope(method.project),true).findAll()
 
-        val dumb= DumbService.getInstance(project).isDumb()
-        val ref=  method.references.size
-        for(usage in usages){
-            val element=usage
-            if(element is PsiMethodCallExpression){
-               println(element)
+        return Pair(methodUsages,overrides)
 
-            }
-        }
+
+    }
+    fun updateMethodUsages(project:Project,method: PsiMethod,extractedClass: PsiClass,relevantVariables: Set<String>):Unit{
+
 
 
     }
@@ -181,7 +183,7 @@ class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(project
                 packageName,
                methodData._3)
 
-            addExtractedClassParameter(project,methodData._1,extractedClass,methodData._3)
+            addExtractedClassParameter(project,methodData._1,extractedClass,relevantParameters)
 
         } else {
 

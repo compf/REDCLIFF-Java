@@ -5,6 +5,8 @@ import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.types.file
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.intellij.ide.impl.OpenProjectTask
+import com.intellij.ide.impl.ProjectUtil
 import com.intellij.lang.java.JavaLanguage
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ApplicationStarter
@@ -36,6 +38,7 @@ import dataClumpRefactoring.DataClumpTypeContext
 import dataClumpRefactoring.KeepLocationMoveDestination
 import dataClumpRefactoring.SuggestedNameWithDataClumpTypeContext
 import io.ktor.util.date.*
+import com.intellij.openapi.project.ex.ProjectManagerEx
 import org.jetbrains.kotlin.idea.base.util.reformat
 
 object PluginRunner : ApplicationStarter {
@@ -272,9 +275,15 @@ class DataClumpRefactorer : CliktCommand() {
     override fun run() {
 
         VirtualFileManager.getInstance().syncRefresh()
-        val projectManager = ProjectManager.getInstance()
-        val project = projectManager.loadAndOpenProject(input.toPath().toString())!!
+        val projectManager = ProjectManagerEx.getInstanceEx()
+        val myPath=input.absolutePath;
+
+        val refactorer= dataClumpRefactoring.DataClumpRefactorer(input)
+        //val project = ProjectUtil.openOrImport(myPath,null,false)!!
+        val project=projectManager.loadAndOpenProject(myPath)!!
+        refactorer.commit(project, "file://"+input.absolutePath)
         PsiManager.getInstance(project).dropPsiCaches()
+
         val suggestedNameWithDataClumpContext =
             Gson().fromJson<SuggestedNameWithDataClumpTypeContext>(methodParameterDCTest, SuggestedNameWithDataClumpTypeContext::class.java)
             println("### Start refactor")
@@ -282,7 +291,7 @@ class DataClumpRefactorer : CliktCommand() {
 
         }
         session.launch()
-        val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(input)
+
         refactorer.refactorDataClump(project,suggestedNameWithDataClumpContext)
         refactorer.commit(project, "file://"+input.absolutePath)
 

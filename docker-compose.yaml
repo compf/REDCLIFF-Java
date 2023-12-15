@@ -10,7 +10,7 @@ services:
       - GRADLE_USER_HOME=/gradle_cache
     volumes:
       - ./:/app
-      - ${FOLDER:-/Users/nbaumgartner/Desktop/TestProject}:/data
+      - ${FOLDER:-/home/compf/data/uni/master/sem4/data_clump_solver/myTest}:/data
       - ${OUTPUT:-./Result}:/output
       - ./gradle_cache:/gradle_cache  # This maps the gradle_cache directory on your host to /gradle_cache in the container
     command:
