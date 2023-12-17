@@ -69,11 +69,11 @@ open class DataClumpRefactorer(private val projectPath:File) {
         var offset = 0
         val lines = text.split('\n')
 
-        for (i in 0 until lineNumber - 1) {
-            offset += lines[i].length + 1 // Add 1 for the newline character
+        for (i in 0 until lineNumber ) {
+            offset += lines[i].length+1;// Add 1 for the newline character
         }
 
-        return offset + columnNumber - 1
+        return offset + columnNumber
     }
     val nameClassMap= mutableMapOf<String,PsiClass>()
     fun getPackageName(file: PsiFile): String {

@@ -27,7 +27,9 @@ import org.jetbrains.kotlin.resolve.calls.util.asCallableReferenceExpression
 import org.jetbrains.kotlin.resolve.calls.util.isCallableReference
 import kotlin.system.exitProcess
 import com.intellij.refactoring.changeSignature.*;
-class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(projectPath) {
+import java.io.BufferedReader
+
+class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(projectPath) {
     fun createClass(
         project: Project,
         className: String,
@@ -144,6 +146,25 @@ class ManualDataClumpRefactorer(projectPath: File) : DataClumpRefactorer(project
         }
 
     }
+    fun updateUsage(project:Project,dataClumpKey:String,extractedClassName:String?,filePath:String,line:Int, column: Int, usageType:UsageType){
+        val bufferedReader: BufferedReader = File(filePath.substring("file://".length)).bufferedReader()
+        val fileContent = bufferedReader.use { it.readText() }
+        val offset=this.calculateOffset(fileContent,line,column)
+        val man = VirtualFileManager.getInstance()
+        val vFile = man.findFileByUrl(filePath)!!
+        val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
+        val element=dataClumpFile.findElementAt(offset)
+        println(filePath)
+        println(line.toString() + " " + column.toString())
+        print(element)
+        println()
+
+
+
+
+
+    }
+    enum class UsageType{VariableUsed,VariableDeclared,MethodUSed,MethodDeclared}
 
     fun collectMethodUsages(project:Project,method: PsiMethod):Pair<Iterable<PsiReference>,Iterable<PsiMethod>>{
         waitForIndexing(project)

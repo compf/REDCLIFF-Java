@@ -33,13 +33,12 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.extractclass.ExtractClassProcessor
 import com.intellij.refactoring.util.classMembers.MemberInfo
-import dataClumpRefactoring.DataClumpFinder
-import dataClumpRefactoring.DataClumpTypeContext
-import dataClumpRefactoring.KeepLocationMoveDestination
-import dataClumpRefactoring.SuggestedNameWithDataClumpTypeContext
 import io.ktor.util.date.*
 import com.intellij.openapi.project.ex.ProjectManagerEx
+import dataClumpRefactoring.*
 import org.jetbrains.kotlin.idea.base.util.reformat
+import com.google.gson.internal.LinkedTreeMap
+import com.google.gson.reflect.TypeToken
 
 object PluginRunner : ApplicationStarter {
     @Deprecated("Specify it as `id` for extension definition in a plugin descriptor")
@@ -79,220 +78,260 @@ class DataClumpRefactorer : CliktCommand() {
     val methodParameterDCTest =
     """
     {
-    'suggestedName':'Point',
-    'context':{
-        'type':'data_clump',
-        'key':'parameters_to_parameters_data_clump-lib/src/main/java/org/example/MathStuff.java-org/example/MathStuff/method/printLength(int x, int y, int z)-org/example/MathStuff/method/printMax(int x, int y, int z)-xyz',
-        'probability':1,
-        'from_file_path':'src/main/java/org/example/MathStuff.java'
-        ,'from_class_or_interface_name':'MathStuff'
-        ,'from_class_or_interface_key':'org/example/MathStuff',
-        'from_method_name':'printLength',
-        'from_method_key':'org/example/MathStuff/method/printLength(int x, int y, int z)',
-        'to_file_path':'src/main/java/org/example/MathStuff.java',
-        'to_class_or_interface_name':'MathStuff',
-        to_class_or_interface_key':'org/example/MathStuff',
-        'to_method_name':'printMax',
-        'to_method_key':'org/example/MathStuff/method/printMax(int x, int y, int z)',
-        'data_clump_type':'parameters_to_parameters_data_clump',
-        'data_clump_data':{
-            'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/x':{
-                'key':'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/x',
-                'name':'x',
-                'type':'int',
-                'probability':1,
-                'modifiers':[],
-                'to_variable':{
-                    'key':'org/example/MathStuff/method/printMax(int x, int y, int z)/parameter/x',
-                    'name':'x',
-                    'type':'int',
-                    'modifiers':[],
-                    'position':{
-                        'startLine':13,'
-                        startColumn':30,
-                        'endLine':13,
-                        'endColumn':31
-                    }
-                },
-                'position':{
-                    'startLine':5,
-                    'startColumn':33,
-                    'endLine':5,
-                    'endColumn':34
-                }
-            },
-            'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/y':{
-                'key':'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/y',
-                'name':'y',
-                'type':'int',
-                'probability':1,
-                'modifiers':[],
-                'to_variable':{
-                    'key':'org/example/MathStuff/method/printMax(int x, int y, int z)/parameter/y',
-                    'name':'y',
-                    'type':'int',
-                    'modifiers':[],
-                    'position':{
-                        'startLine':13,
-                        'startColumn':37,
-                        'endLine':13,
-                        'endColumn':38
-                    }
-                },
-                'position':{
-                    'startLine':5,
-                    'startColumn':40,
-                    'endLine':5,
-                    'endColumn':41
-                }
-            },
-            'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/z':{
-                'key':'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/z',
-                'name':'z',
-                'type':'int',
-                'probability':1,
-                'modifiers':[],
-                'to_variable':{
-                    'key':'org/example/MathStuff/method/printMax(int x, int y, int z)/parameter/z',
-                    'name':'z',
-                    'type':'int',
-                    'modifiers':[],
-                    'position':{
-                        'startLine':13,
-                        'startColumn':44,
-                        'endLine':13,
-                        'endColumn':45
-                    }
-                },
-                'position':{
-                    'startLine':5,
-                    'startColumn':47,
-                    'endLine':5,
-                    'endColumn':48
-                }
+      "type": "data_clump",
+      "key": "parameters_to_parameters_data_clump-src/main/java/org/example/MathStuff.java-org.example.MathStuff/method/printLength(int x, int y, int z)-org.example.BetterMathStuff/method/printMax(int x, int y, int z)-xyz",
+      "probability": 1,
+      "from_file_path": "src/main/java/org/example/MathStuff.java",
+      "from_class_or_interface_name": "MathStuff",
+      "from_class_or_interface_key": "org.example.MathStuff",
+      "from_method_name": "printLength",
+      "from_method_key": "org.example.MathStuff/method/printLength(int x, int y, int z)",
+      "to_file_path": "src/main/java/org/example/BetterMathStuff.java",
+      "to_class_or_interface_name": "BetterMathStuff",
+      "to_class_or_interface_key": "org.example.BetterMathStuff",
+      "to_method_name": "printMax",
+      "to_method_key": "org.example.BetterMathStuff/method/printMax(int x, int y, int z)",
+      "data_clump_type": "parameters_to_parameters_data_clump",
+      "data_clump_data": {
+        "org.example.MathStuff/method/printLength(int x, int y, int z)/parameter/x": {
+          "key": "org.example.MathStuff/method/printLength(int x, int y, int z)/parameter/x",
+          "name": "x",
+          "type": "int",
+          "probability": 1,
+          "modifiers": [],
+          "to_variable": {
+            "key": "org.example.BetterMathStuff/method/printMax(int x, int y, int z)/parameter/x",
+            "name": "x",
+            "type": "int",
+            "modifiers": [],
+            "position": {
+              "startLine": 5,
+              "startColumn": 40,
+              "endLine": 5,
+              "endColumn": 41
             }
+          },
+          "position": {
+            "startLine": 7,
+            "startColumn": 33,
+            "endLine": 7,
+            "endColumn": 34
+          }
+        },
+        "org.example.MathStuff/method/printLength(int x, int y, int z)/parameter/y": {
+          "key": "org.example.MathStuff/method/printLength(int x, int y, int z)/parameter/y",
+          "name": "y",
+          "type": "int",
+          "probability": 1,
+          "modifiers": [],
+          "to_variable": {
+            "key": "org.example.BetterMathStuff/method/printMax(int x, int y, int z)/parameter/y",
+            "name": "y",
+            "type": "int",
+            "modifiers": [],
+            "position": {
+              "startLine": 5,
+              "startColumn": 47,
+              "endLine": 5,
+              "endColumn": 48
+            }
+          },
+          "position": {
+            "startLine": 7,
+            "startColumn": 40,
+            "endLine": 7,
+            "endColumn": 41
+          }
+        },
+        "org.example.MathStuff/method/printLength(int x, int y, int z)/parameter/z": {
+          "key": "org.example.MathStuff/method/printLength(int x, int y, int z)/parameter/z",
+          "name": "z",
+          "type": "int",
+          "probability": 1,
+          "modifiers": [],
+          "to_variable": {
+            "key": "org.example.BetterMathStuff/method/printMax(int x, int y, int z)/parameter/z",
+            "name": "z",
+            "type": "int",
+            "modifiers": [],
+            "position": {
+              "startLine": 5,
+              "startColumn": 54,
+              "endLine": 5,
+              "endColumn": 55
+            }
+          },
+          "position": {
+            "startLine": 7,
+            "startColumn": 47,
+            "endLine": 7,
+            "endColumn": 48
+          }
         }
-    }
-}
+      }
+      }
+    
     """
     val fieldDCTest =
         """
-    {
-    'suggestedName':'Point',
-    'context':{
-        'type':'data_clump',
-        'key':'parameters_to_parameters_data_clump-lib/src/main/java/org/example/MathStuff.java-org/example/MathStuff/method/printLength(int x, int y, int z)-org/example/MathStuff/method/printMax(int x, int y, int z)-xyz',
-        'probability':1,
-        'from_file_path':'src/main/java/org/example/MathStuff.java'
-        ,'from_class_or_interface_name':'MathStuff'
-        ,'from_class_or_interface_key':'org/example/MathStuff',
-        'to_file_path':'src/main/java/org/example/Library.java',
-        'to_class_or_interface_name':'Library',
-        to_class_or_interface_key':'org/example/Library',
-   
-        'data_clump_type':'fields_to_fields_data_clump',
-        'data_clump_data':{
-            'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/x':{
-                'key':'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/x',
-                'name':'sign',
-                'type':'boolean',
-                'probability':1,
-                'modifiers':[],
-                'to_variable':{
-                    'key':'org/example/MathStuff/method/printMax(int x, int y, int z)/parameter/x',
-                    'name':'sign',
-                    'type':'boolean',
-                    'modifiers':[],
-                    'position':{
-                        'startLine':13,'
-                        startColumn':30,
-                        'endLine':13,
-                        'endColumn':31
-                    }
-                },
-                'position':{
-                    'startLine':5,
-                    'startColumn':33,
-                    'endLine':5,
-                    'endColumn':34
-                }
-            },
-            'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/y':{
-                'key':'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/y',
-                'name':'mantissa',
-                'type':'double',
-                'probability':1,
-                'modifiers':[],
-                'to_variable':{
-                    'key':'org/example/MathStuff/method/printMax(int x, int y, int z)/parameter/y',
-                    'name':'mantissa',
-                    'type':'double',
-                    'modifiers':[],
-                    'position':{
-                        'startLine':13,
-                        'startColumn':37,
-                        'endLine':13,
-                        'endColumn':38
-                    }
-                },
-                'position':{
-                    'startLine':5,
-                    'startColumn':40,
-                    'endLine':5,
-                    'endColumn':41
-                }
-            },
-            'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/z':{
-                'key':'org/example/MathStuff/method/printLength(int x, int y, int z)/parameter/z',
-                'name':'exponent',
-                'type':'int',
-                'probability':1,
-                'modifiers':[],
-                'to_variable':{
-                    'key':'org/example/MathStuff/method/printMax(int x, int y, int z)/parameter/z',
-                    'name':'exponent',
-                    'type':'int',
-                    'modifiers':[],
-                    'position':{
-                        'startLine':13,
-                        'startColumn':44,
-                        'endLine':13,
-                        'endColumn':45
-                    }
-                },
-                'position':{
-                    'startLine':5,
-                    'startColumn':47,
-                    'endLine':5,
-                    'endColumn':48
-                }
+ {
+      "type": "data_clump",
+      "key": "fields_to_fields_data_clump-src/main/java/org/example/Library.java-org.example.Library-org.example.MathStuff-exponentmantissasign",
+      "probability": 1,
+      "from_file_path": "src/main/java/org/example/Library.java",
+      "from_class_or_interface_name": "Library",
+      "from_class_or_interface_key": "org.example.Library",
+      "from_method_name": null,
+      "from_method_key": null,
+      "to_file_path": "src/main/java/org/example/MathStuff.java",
+      "to_class_or_interface_key": "org.example.MathStuff",
+      "to_class_or_interface_name": "Library",
+      "to_method_key": null,
+      "to_method_name": null,
+      "data_clump_type": "fields_to_fields_data_clump",
+      "data_clump_data": {
+        "org.example.Library/memberField/exponent": {
+          "key": "org.example.Library/memberField/exponent",
+          "name": "exponent",
+          "type": "int",
+          "probability": 1,
+          "modifiers": [
+            "PRIVATE"
+          ],
+          "to_variable": {
+            "key": "org.example.MathStuff/memberField/exponent",
+            "name": "exponent",
+            "type": "int",
+            "modifiers": [
+              "PRIVATE"
+            ],
+            "position": {
+              "startLine": 6,
+              "startColumn": 17,
+              "endLine": 6,
+              "endColumn": 25
             }
+          },
+          "position": {
+            "startLine": 19,
+            "startColumn": 17,
+            "endLine": 19,
+            "endColumn": 25
+          }
+        },
+        "org.example.Library/memberField/mantissa": {
+          "key": "org.example.Library/memberField/mantissa",
+          "name": "mantissa",
+          "type": "double",
+          "probability": 1,
+          "modifiers": [
+            "PRIVATE"
+          ],
+          "to_variable": {
+            "key": "org.example.MathStuff/memberField/mantissa",
+            "name": "mantissa",
+            "type": "double",
+            "modifiers": [
+              "PRIVATE"
+            ],
+            "position": {
+              "startLine": 5,
+              "startColumn": 20,
+              "endLine": 5,
+              "endColumn": 28
+            }
+          },
+          "position": {
+            "startLine": 18,
+            "startColumn": 20,
+            "endLine": 18,
+            "endColumn": 28
+          }
+        },
+        "org.example.Library/memberField/sign": {
+          "key": "org.example.Library/memberField/sign",
+          "name": "sign",
+          "type": "boolean",
+          "probability": 1,
+          "modifiers": [
+            "PRIVATE"
+          ],
+          "to_variable": {
+            "key": "org.example.MathStuff/memberField/sign",
+            "name": "sign",
+            "type": "boolean",
+            "modifiers": [
+              "PRIVATE"
+            ],
+            "position": {
+              "startLine": 4,
+              "startColumn": 21,
+              "endLine": 4,
+              "endColumn": 25
+            }
+          },
+          "position": {
+            "startLine": 17,
+            "startColumn": 21,
+            "endLine": 17,
+            "endColumn": 25
+          }
         }
-    }
-}
+      }
+    
     """
 
     override fun run() {
 
         VirtualFileManager.getInstance().syncRefresh()
         val projectManager = ProjectManagerEx.getInstanceEx()
-        val myPath=input.absolutePath;
+        val myPath="/home/compf/data/uni/master/sem4/data_clump_solver/javaTest"
 
-        val refactorer= dataClumpRefactoring.DataClumpRefactorer(input)
-        //val project = ProjectUtil.openOrImport(myPath,null,false)!!
+        val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(File(myPath))
+
         val project=projectManager.loadAndOpenProject(myPath)!!
-        refactorer.commit(project, "file://"+input.absolutePath)
-        PsiManager.getInstance(project).dropPsiCaches()
 
-        val suggestedNameWithDataClumpContext =
-            Gson().fromJson<SuggestedNameWithDataClumpTypeContext>(methodParameterDCTest, SuggestedNameWithDataClumpTypeContext::class.java)
-            println("### Start refactor")
+
+        /*val dcContext =
+            Gson().fromJson<DataClumpTypeContext>(methodParameterDCTest, DataClumpTypeContext::class.java)*/
+        try{
+            val typeToken = object : TypeToken<Map<String, List<UsageExample>>>() {}.type
+            val usages=Gson().fromJson<Map<String,List<UsageExample>>> (usageExample,typeToken)
+            for(key in usages.keys){
+
+               for(usg in usages[key]!!){
+
+
+                   val pos = usg.range
+                   refactorer.updateUsage(
+                       project,
+                       key,
+                       usg.suggestedName,
+                       usg.filePath,
+                       pos.startLine,
+                       pos.startColumn,
+                       ManualDataClumpRefactorer.UsageType.values()[usg.symbolType]
+                   )
+               }
+
+
+            }
+        }
+        catch (ex:Throwable){
+            ex.printStackTrace()
+        }
+
+
         val session=RefreshQueue.getInstance().createSession(false,true){
 
         }
+        //val pos=dcContext.data_clump_data.values.first().position
+        //refactorer.updateUsage(project, dcContext.key,"Point",dcContext.from_file_path,pos.startLine,pos.startColumn,ManualDataClumpRefactorer.UsageType.VariableUsed)
+
+
         session.launch()
 
-        refactorer.refactorDataClump(project,suggestedNameWithDataClumpContext)
+        //refactorer.refactorDataClump(project,suggestedNameWithDataClumpContext)
         refactorer.commit(project, "file://"+input.absolutePath)
 
         println("### finnished refactor")
