@@ -5,13 +5,8 @@ import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.types.file
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import com.intellij.ide.impl.OpenProjectTask
-import com.intellij.ide.impl.ProjectUtil
-import com.intellij.lang.java.JavaLanguage
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ApplicationStarter
-import com.intellij.openapi.application.WriteAction
-import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
@@ -20,24 +15,16 @@ import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.*
 import java.io.File
 import kotlin.system.exitProcess
-import org.jetbrains.kotlin.lombok.utils.decapitalize
 import org.jetbrains.research.pluginUtilities.openRepository.getKotlinJavaRepositoryOpener
 import org.jetbrains.research.refactoringDemoPlugin.parsedAstTypes.*
 import org.jetbrains.research.refactoringDemoPlugin.util.extractElementsOfType
 import org.jetbrains.research.refactoringDemoPlugin.util.extractModules
 import org.jetbrains.research.refactoringDemoPlugin.util.findPsiFilesByExtension
 import com.intellij.refactoring.introduceParameterObject.*
-import  com.intellij.refactoring.changeSignature.ParameterInfoImpl;
 import com.intellij.openapi.vfs.newvfs.RefreshQueue
-import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.searches.ReferencesSearch
-import com.intellij.refactoring.extractclass.ExtractClassProcessor
-import com.intellij.refactoring.util.classMembers.MemberInfo
 import io.ktor.util.date.*
 import com.intellij.openapi.project.ex.ProjectManagerEx
 import dataClumpRefactoring.*
-import org.jetbrains.kotlin.idea.base.util.reformat
-import com.google.gson.internal.LinkedTreeMap
 import com.google.gson.reflect.TypeToken
 
 object PluginRunner : ApplicationStarter {
@@ -295,28 +282,36 @@ class DataClumpRefactorer : CliktCommand() {
         /*val dcContext =
             Gson().fromJson<DataClumpTypeContext>(methodParameterDCTest, DataClumpTypeContext::class.java)*/
         try{
-            val typeToken = object : TypeToken<Map<String, List<UsageExample>>>() {}.type
-            val usages=Gson().fromJson<Map<String,List<UsageExample>>> (usageExample,typeToken)
+            val typeToken = object : TypeToken<Map<String, List<UsageInfo>>>() {}.type
+            val usages=Gson().fromJson<Map<String,List<UsageInfo>>> (usageExample,typeToken)
+            val usageElementMap=mutableMapOf<UsageInfo,PsiElement>()
             for(key in usages.keys){
 
                for(usg in usages[key]!!){
 
 
                    val pos = usg.range
-                   refactorer.updateUsage(
+                   val ele=refactorer.getElement(
                        project,
-                       key,
-                       usg.suggestedName,
-                       usg.filePath,
-                       pos.startLine,
-                       pos.startColumn,
-                       ManualDataClumpRefactorer.UsageType.values()[usg.symbolType]
+                      usg
                    )
+                   usageElementMap[usg]=ele
                }
 
 
             }
+            val nameService=PrimitiveNameService()
+            for(pair in usageElementMap){
+                try{
+                    refactorer.updateElementFromUsageInfo(project,pair.key,pair.value,nameService)
+                }
+                catch (ex:Throwable){
+                    ex.printStackTrace()
+                }
+
+            }
         }
+
         catch (ex:Throwable){
             ex.printStackTrace()
         }

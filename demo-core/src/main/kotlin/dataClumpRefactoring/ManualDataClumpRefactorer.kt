@@ -23,10 +23,13 @@ import java.io.File
 import com.intellij.openapi.project.DumbService;
 import com.intellij.psi.search.searches.OverridingMethodsSearch;
 import com.intellij.psi.search.searches.MethodReferencesSearch;
+import com.intellij.psi.util.childrenOfType
+import com.intellij.psi.util.findParentOfType
 import org.jetbrains.kotlin.resolve.calls.util.asCallableReferenceExpression
 import org.jetbrains.kotlin.resolve.calls.util.isCallableReference
 import kotlin.system.exitProcess
 import com.intellij.refactoring.changeSignature.*;
+import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 import java.io.BufferedReader
 
 class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(projectPath) {
@@ -98,6 +101,7 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
     fun findClass(className: String): PsiClass {
         return nameClassMap[className]!!
     }
+
     fun addExtractedClassParameter(project: Project,dataClumpMethod:PsiMethod,extractedClass: PsiClass,relevantVariables: Set<String>){
         val methodUsagesAndoVerrides=collectMethodUsages(project,dataClumpMethod)
         for(method in methodUsagesAndoVerrides.second){
@@ -106,7 +110,7 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
             WriteCommandAction.runWriteCommandAction(project){
                 method.parameterList.add(parameter)
             }
-            updateParameterUsages(project,method,extractedClass,parameter,relevantVariables)
+            //updateParameterUsages(project,method,extractedClass,parameter,relevantVariables)
             updateMethodUsages(project,method,extractedClass,relevantVariables)
         }
 
@@ -117,47 +121,70 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
 
     }
-    fun updateParameterUsages(project: Project,method:PsiMethod,extractedClass: PsiClass,parameter:PsiParameter,relevantParameterNames: Set<String>){
-        for(param in method.parameterList.parameters.filter { relevantParameterNames.contains(it.name) }){
-            val getterCall=JavaPsiFacade.getElementFactory(method.project).createExpressionFromText("${parameter.name}.get${param.name!!.replaceFirstChar { it.uppercase() }}()",method)
-            val usages = ReferencesSearch.search(param,method.resolveScope).findAll()
-            for (usage in usages) {
-                val element = usage.element
-                if(element.parent is PsiAssignmentExpression && (element.parent as PsiAssignmentExpression).lExpression==element) {
+    fun updateVariableUsage(project: Project,extractedClass: PsiClass,identifier:PsiIdentifier,nameService:IdentifierNameService){
+            val getterName=nameService.getGetterName(extractedClass,identifier.text!!)
+            val method=identifier.getParentOfType<PsiMethod>(true)
+        if(method==null){
+            return;
+        }
+            val currentClass=identifier.getParentOfType<PsiClass>(true)
+            val objectName =if(identifier is  PsiField) nameService.getFieldName(extractedClass,currentClass) else nameService.getParameterName(extractedClass,method)
+            val getterCall=JavaPsiFacade.getElementFactory(method.project).createExpressionFromText("${objectName}.${getterName}()",method)
+
+
+                if(identifier.parent is PsiAssignmentExpression && (identifier.parent as PsiAssignmentExpression).lExpression==identifier) {
                     WriteCommandAction.runWriteCommandAction(project) {
                         var setterCall = JavaPsiFacade.getElementFactory(method.project).createExpressionFromText(
-                            "${parameter.name}.set${param.name!!.replaceFirstChar { it.uppercase() }}(${(element.parent as PsiAssignmentExpression).rExpression!!.text})",
+                            "${objectName}.${nameService.getSetterName(extractedClass,identifier.text!!)}(${(identifier.parent as PsiAssignmentExpression).rExpression!!.text})",
                             method
                         )
-                        element.parent.replace(setterCall)
-                        (element.parent as PsiAssignmentExpression).rExpression?.replace(getterCall)
+                        identifier.parent.replace(setterCall)
+                        //(element.parent as PsiAssignmentExpression).rExpression?.replace(getterCall)
                     }
                 }
                 else  {
-                    val parent = element.parent
+                    val parent = identifier.parent
                     WriteCommandAction.runWriteCommandAction(project){
-                        usage.element.replace(getterCall)
+                        identifier.replace(getterCall)
                     }
 
                     print(parent)
                 }
                 commitAll(project)
-            }
-        }
+
+
 
     }
-    fun updateUsage(project:Project,dataClumpKey:String,extractedClassName:String?,filePath:String,line:Int, column: Int, usageType:UsageType){
-        val bufferedReader: BufferedReader = File(filePath.substring("file://".length)).bufferedReader()
-        val fileContent = bufferedReader.use { it.readText() }
-        val offset=this.calculateOffset(fileContent,line,column)
+    fun updateElementFromUsageInfo(project: Project,usageInfo: UsageInfo,element:PsiElement,nameService:IdentifierNameService) {
+        val symbolType=UsageType.values()[usageInfo.symbolType]
         val man = VirtualFileManager.getInstance()
-        val vFile = man.findFileByUrl(filePath)!!
+        if(usageInfo.extractedClassPath==null) return
+        val extractedClassFile= PsiManager.getInstance(project).findFile(man.findFileByUrl(usageInfo.extractedClassPath)!!)!!
+        val extractedClass=extractedClassFile.childrenOfType<PsiClass>().first()
+        when(symbolType){
+            UsageType.VariableUsed->{
+                updateVariableUsage(project,extractedClass,element as PsiIdentifier,PrimitiveNameService())
+            }
+            else->{}
+        }
+    }
+    fun getElement(project:Project,usageInfo: UsageInfo):PsiElement{
+        val bufferedReader: BufferedReader = File(usageInfo.filePath.substring("file://".length)).bufferedReader()
+        val fileContent = bufferedReader.use { it.readText() }
+        val offset=this.calculateOffset(fileContent,usageInfo.range.startLine,usageInfo.range.startColumn)
+        val man = VirtualFileManager.getInstance()
+        val vFile = man.findFileByUrl(usageInfo.filePath)!!
         val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
+
+
         val element=dataClumpFile.findElementAt(offset)
-        println(filePath)
-        println(line.toString() + " " + column.toString())
+        println(usageInfo.name)
+        println(usageInfo.range.startLine.toString() + " " + usageInfo.range.startColumn.toString())
         print(element)
         println()
+        return element!!
+
+
 
 
 
