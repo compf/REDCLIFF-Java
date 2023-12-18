@@ -121,6 +121,16 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
 
     }
+    fun isOnLeftSideOfAssignemt(element:PsiElement):Boolean{
+       var curr:PsiElement?=element
+        var prev:PsiElement?=element
+        while(curr !is  PsiAssignmentExpression){
+            prev=curr
+            curr=curr?.parent
+            if(curr==null) return false
+        }
+        return (curr as PsiAssignmentExpression).lExpression==prev
+    }
     fun updateVariableUsage(project: Project,extractedClass: PsiClass,identifier:PsiIdentifier,nameService:IdentifierNameService){
             val getterName=nameService.getGetterName(extractedClass,identifier.text!!)
             val method=identifier.getParentOfType<PsiMethod>(true)
@@ -132,13 +142,13 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
             val getterCall=JavaPsiFacade.getElementFactory(method.project).createExpressionFromText("${objectName}.${getterName}()",method)
 
 
-                if(identifier.parent is PsiAssignmentExpression && (identifier.parent as PsiAssignmentExpression).lExpression==identifier) {
+                if(isOnLeftSideOfAssignemt(identifier)){
                     WriteCommandAction.runWriteCommandAction(project) {
                         var setterCall = JavaPsiFacade.getElementFactory(method.project).createExpressionFromText(
-                            "${objectName}.${nameService.getSetterName(extractedClass,identifier.text!!)}(${(identifier.parent as PsiAssignmentExpression).rExpression!!.text})",
+                            "${objectName}.${nameService.getSetterName(extractedClass,identifier.text!!)}(${(identifier.getParentOfType<PsiAssignmentExpression>(true) as PsiAssignmentExpression).rExpression!!.text})",
                             method
                         )
-                        identifier.parent.replace(setterCall)
+                        identifier.getParentOfType<PsiAssignmentExpression>(true)!!.replace(setterCall)
                         //(element.parent as PsiAssignmentExpression).rExpression?.replace(getterCall)
                     }
                 }
@@ -148,7 +158,7 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                         identifier.replace(getterCall)
                     }
 
-                    print(parent)
+                    println(parent)
                 }
                 commitAll(project)
 
@@ -158,31 +168,51 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
     fun updateElementFromUsageInfo(project: Project,usageInfo: UsageInfo,element:PsiElement,nameService:IdentifierNameService) {
         val symbolType=UsageType.values()[usageInfo.symbolType]
         val man = VirtualFileManager.getInstance()
+
         if(usageInfo.extractedClassPath==null) return
         val extractedClassFile= PsiManager.getInstance(project).findFile(man.findFileByUrl(usageInfo.extractedClassPath)!!)!!
         val extractedClass=extractedClassFile.childrenOfType<PsiClass>().first()
         when(symbolType){
             UsageType.VariableUsed->{
+                println("####")
+                if(usageInfo.range.startLine==21){
+                    toString()
+                }
+                println(usageInfo.symbolType)
                 updateVariableUsage(project,extractedClass,element as PsiIdentifier,PrimitiveNameService())
+                println("####")
+                //git reset --hard && git clean -df
             }
             else->{}
         }
     }
-    fun getElement(project:Project,usageInfo: UsageInfo):PsiElement{
+    fun isValidElement(element:PsiElement,usageType:UsageType):Boolean{
+        if( element is PsiWhiteSpace || element is PsiComment)return false
+        if( usageType==UsageType.VariableUsed && element.parent?.let { it.nextSibling  is PsiExpressionList} == true) return false
+        return true
+    }
+    fun getElement(project:Project,usageInfo: UsageInfo):PsiElement?{
         val bufferedReader: BufferedReader = File(usageInfo.filePath.substring("file://".length)).bufferedReader()
         val fileContent = bufferedReader.use { it.readText() }
         val offset=this.calculateOffset(fileContent,usageInfo.range.startLine,usageInfo.range.startColumn)
         val man = VirtualFileManager.getInstance()
         val vFile = man.findFileByUrl(usageInfo.filePath)!!
+        vFile.refresh(false,true)
         val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
 
 
         val element=dataClumpFile.findElementAt(offset)
-        println(usageInfo.name)
-        println(usageInfo.range.startLine.toString() + " " + usageInfo.range.startColumn.toString())
-        print(element)
-        println()
-        return element!!
+        if(isValidElement(element!!,UsageType.values()[usageInfo.symbolType])){
+            println(usageInfo.name)
+            println(usageInfo.range.startLine.toString() + " " + usageInfo.range.startColumn.toString())
+            print(element)
+            println()
+            return element!!
+        }
+        else{
+            return null
+        }
+
 
 
 

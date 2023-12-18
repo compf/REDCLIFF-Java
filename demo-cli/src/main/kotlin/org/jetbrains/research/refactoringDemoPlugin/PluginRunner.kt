@@ -273,11 +273,12 @@ class DataClumpRefactorer : CliktCommand() {
         VirtualFileManager.getInstance().syncRefresh()
         val projectManager = ProjectManagerEx.getInstanceEx()
         val myPath="/home/compf/data/uni/master/sem4/data_clump_solver/javaTest"
+        projectManager.closeAndDisposeAllProjects(true)
 
         val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(File(myPath))
 
         val project=projectManager.loadAndOpenProject(myPath)!!
-
+        PsiManager.getInstance(project).dropPsiCaches()
 
         /*val dcContext =
             Gson().fromJson<DataClumpTypeContext>(methodParameterDCTest, DataClumpTypeContext::class.java)*/
@@ -295,7 +296,10 @@ class DataClumpRefactorer : CliktCommand() {
                        project,
                       usg
                    )
-                   usageElementMap[usg]=ele
+                   ele?.let{
+                       usageElementMap[usg]=ele
+                   }
+
                }
 
 
