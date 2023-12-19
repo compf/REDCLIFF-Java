@@ -2,35 +2,16 @@ package dataClumpRefactoring
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.openapi.vfs.newvfs.RefreshQueue
-import com.intellij.psi.PsiClassOwner
 import com.intellij.psi.*
 import com.intellij.psi.PsiManager
-import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.searches.ReferencesSearch
-import com.intellij.refactoring.changeSignature.ParameterInfoImpl
-import com.intellij.refactoring.extractclass.ExtractClassProcessor
-import com.intellij.refactoring.introduceParameterObject.IntroduceParameterObjectProcessor
-import com.intellij.refactoring.introduceparameterobject.JavaIntroduceParameterObjectClassDescriptor
-import com.intellij.refactoring.util.classMembers.MemberInfo
-import org.jetbrains.research.refactoringDemoPlugin.util.extractKotlinAndJavaClasses
 import  com.intellij.openapi.application.WriteAction
 import com.intellij.ide.fileTemplates.JavaTemplateUtil;
-import com.intellij.lang.Language
-import org.jetbrains.kotlin.psi.psiUtil.findDescendantOfType
 import com.intellij.openapi.command.WriteCommandAction;
 import java.io.File
-import com.intellij.openapi.project.DumbService;
-import com.intellij.psi.search.searches.OverridingMethodsSearch;
-import com.intellij.psi.search.searches.MethodReferencesSearch;
 import com.intellij.psi.util.childrenOfType
-import com.intellij.psi.util.findParentOfType
-import org.jetbrains.kotlin.resolve.calls.util.asCallableReferenceExpression
-import org.jetbrains.kotlin.resolve.calls.util.isCallableReference
-import kotlin.system.exitProcess
-import com.intellij.refactoring.changeSignature.*;
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 import java.io.BufferedReader
+import java.nio.file.Path
 
 class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(projectPath) {
     fun createClass(
@@ -102,23 +83,22 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         return nameClassMap[className]!!
     }
 
-    fun addExtractedClassParameter(project: Project,dataClumpMethod:PsiMethod,extractedClass: PsiClass,relevantVariables: Set<String>){
-        val methodUsagesAndoVerrides=collectMethodUsages(project,dataClumpMethod)
-        for(method in methodUsagesAndoVerrides.second){
+    fun updateMethodSignature(project: Project,method:PsiMethod,extractedClass: PsiClass,relevantParameterNames: Set<String>,nameService: IdentifierNameService){
+
             val type=JavaPsiFacade.getElementFactory(method.project).createType(extractedClass)
-            val parameter = JavaPsiFacade.getElementFactory(method.project).createParameter(extractedClass.name!!.replaceFirstChar { it.lowercase() }, type)
+            val parameter = JavaPsiFacade.getElementFactory(method.project).createParameter(nameService.getParameterName(extractedClass,method), type)
             WriteCommandAction.runWriteCommandAction(project){
                 method.parameterList.add(parameter)
-            }
-            //updateParameterUsages(project,method,extractedClass,parameter,relevantVariables)
-            updateMethodUsages(project,method,extractedClass,relevantVariables)
         }
-
-
-
-
-
-
+        for(paramName in relevantParameterNames){
+          val param=method.parameterList.parameters.find { it.name==paramName }
+            if(param!=null){
+                WriteCommandAction.runWriteCommandAction(project){
+                    param.delete()
+                }
+            }
+        }
+        commitAll(project)
 
     }
     fun isOnLeftSideOfAssignemt(element:PsiElement):Boolean{
@@ -166,14 +146,15 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
     }
     fun updateElementFromUsageInfo(project: Project,usageInfo: UsageInfo,element:PsiElement,nameService:IdentifierNameService) {
-        val symbolType=UsageType.values()[usageInfo.symbolType]
+        val symbolType= UsageInfo.UsageType.values()[usageInfo.symbolType]
         val man = VirtualFileManager.getInstance()
 
         if(usageInfo.extractedClassPath==null) return
-        val extractedClassFile= PsiManager.getInstance(project).findFile(man.findFileByUrl(usageInfo.extractedClassPath)!!)!!
+        println(getURI(usageInfo.extractedClassPath))
+        val extractedClassFile= PsiManager.getInstance(project).findFile(man.findFileByUrl(getURI(usageInfo.extractedClassPath)!!)!!)!!
         val extractedClass=extractedClassFile.childrenOfType<PsiClass>().first()
         when(symbolType){
-            UsageType.VariableUsed->{
+            UsageInfo.UsageType.VariableUsed->{
                 println("####")
                 if(usageInfo.range.startLine==21){
                     toString()
@@ -183,26 +164,30 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                 println("####")
                 //git reset --hard && git clean -df
             }
+            UsageInfo.UsageType.MethodDeclared->{
+                updateMethodSignature(project,element.getParentOfType<PsiMethod>(true)!!,extractedClass,usageInfo.variableNames,PrimitiveNameService())
+            }
             else->{}
         }
     }
-    fun isValidElement(element:PsiElement,usageType:UsageType):Boolean{
+    fun isValidElement(element:PsiElement,usageType: UsageInfo.UsageType):Boolean{
         if( element is PsiWhiteSpace || element is PsiComment)return false
-        if( usageType==UsageType.VariableUsed && element.parent?.let { it.nextSibling  is PsiExpressionList} == true) return false
+        if( usageType== UsageInfo.UsageType.VariableUsed && element.parent?.let { it.nextSibling  is PsiExpressionList} == true) return false
         return true
     }
     fun getElement(project:Project,usageInfo: UsageInfo):PsiElement?{
-        val bufferedReader: BufferedReader = File(usageInfo.filePath.substring("file://".length)).bufferedReader()
+        println(usageInfo.filePath)
+        val bufferedReader: BufferedReader =Path.of(this.projectPath.absolutePath,usageInfo.filePath).toFile().bufferedReader()
         val fileContent = bufferedReader.use { it.readText() }
         val offset=this.calculateOffset(fileContent,usageInfo.range.startLine,usageInfo.range.startColumn)
         val man = VirtualFileManager.getInstance()
-        val vFile = man.findFileByUrl(usageInfo.filePath)!!
+        val vFile = man.findFileByUrl(getURI(usageInfo.filePath)!!)!!
         vFile.refresh(false,true)
         val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
 
 
         val element=dataClumpFile.findElementAt(offset)
-        if(isValidElement(element!!,UsageType.values()[usageInfo.symbolType])){
+        if(isValidElement(element!!, UsageInfo.UsageType.values()[usageInfo.symbolType])){
             println(usageInfo.name)
             println(usageInfo.range.startLine.toString() + " " + usageInfo.range.startColumn.toString())
             print(element)
@@ -221,51 +206,6 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
 
     }
-    enum class UsageType{VariableUsed,VariableDeclared,MethodUSed,MethodDeclared}
-
-    fun collectMethodUsages(project:Project,method: PsiMethod):Pair<Iterable<PsiReference>,Iterable<PsiMethod>>{
-        waitForIndexing(project)
-
-        val methodUsages = ReferencesSearch.search(method,GlobalSearchScope.allScope(method.project),true).findAll()
-        val overrides=OverridingMethodsSearch.search(method,GlobalSearchScope.allScope(method.project),true).findAll()
-
-        return Pair(methodUsages,overrides)
 
 
-    }
-    fun updateMethodUsages(project:Project,method: PsiMethod,extractedClass: PsiClass,relevantVariables: Set<String>):Unit{
-
-
-
-    }
-    override fun refactorDataClumpEndpoint(
-        dataClumpType: String,
-        project: Project,
-        suggestedClassName: String,
-        classProbablyExisting: Boolean,
-        ep: DataClumpEndpoint,
-        relevantParameters: Set<String>
-    ) {
-        val man = VirtualFileManager.getInstance()
-        val vFile = man.findFileByUrl(ep.filePath)!!
-        val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
-        val dataClumpClass = dataClumpFile.findDescendantOfType<PsiClass> { it.name == ep.className }!!
-        val packageName = getPackageName(dataClumpFile)
-        if (ep.dataClumpType == "parameters") {
-            val methodData = this.getMethodAndParamsToRefactor(dataClumpClass, ep.methodName!!, relevantParameters)
-
-            val extractedClass = if (classProbablyExisting) findClass(suggestedClassName) else createClass(
-                project,
-                suggestedClassName,
-                dataClumpFile.parent!!,
-                packageName,
-               methodData._3)
-
-            addExtractedClassParameter(project,methodData._1,extractedClass,relevantParameters)
-
-        } else {
-
-        }
-
-    }
 }
