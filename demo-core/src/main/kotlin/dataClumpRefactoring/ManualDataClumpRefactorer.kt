@@ -10,6 +10,7 @@ import com.intellij.openapi.command.WriteCommandAction;
 import java.io.File
 import com.intellij.psi.util.childrenOfType
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
+import org.jetbrains.uast.java.JavaConstructorUCallExpression
 import java.io.BufferedReader
 import java.nio.file.Path
 
@@ -83,7 +84,10 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         return nameClassMap[className]!!
     }
 
-    fun updateMethodSignature(project: Project,method:PsiMethod,extractedClass: PsiClass,relevantParameterNames: Set<String>,nameService: IdentifierNameService){
+    fun updateMethodSignature(project: Project,method:PsiMethod,extractedClass: PsiClass,relevantParameterNames: Array<String>,nameService: IdentifierNameService){
+        if(method.parameterList.parameters.none{it.name in relevantParameterNames}){
+            return;
+        }
 
             val type=JavaPsiFacade.getElementFactory(method.project).createType(extractedClass)
             val parameter = JavaPsiFacade.getElementFactory(method.project).createParameter(nameService.getParameterName(extractedClass,method), type)
@@ -145,8 +149,96 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
 
     }
+    fun calcUniqueKey(usageInfo: UsageInfo):String{
+        return usageInfo.extractedClassPath+usageInfo.filePath+usageInfo.name!!
+    }
+    fun updateFieldDeclarations(project:Project,element:PsiElement,extractedClass: PsiClass,usageInfo: UsageInfo,nameService: IdentifierNameService){
+        val field=element.getParentOfType<PsiField>(true)!!
+        val containingClass=field.getParentOfType<PsiClass>(true)
+        if(containingClass==null){
+            return
+        }
+        val type=JavaPsiFacade.getElementFactory(project).createType(extractedClass)
+        val extractedFieldName=nameService.getFieldName(extractedClass,containingClass)
+        var extractedField= containingClass!!.childrenOfType<PsiField>().firstOrNull(){it.name==extractedFieldName}
+        val constructor=extractedClass.constructors.first { it.parameterList.parameters.size==usageInfo.variableNames.size }
+       if(extractedField==null){
+                extractedField=JavaPsiFacade.getElementFactory(project).createField(extractedFieldName,type)
+           extractedField.initializer=JavaPsiFacade.getElementFactory(project).createExpressionFromText("new ${extractedClass.qualifiedName}(${Array(usageInfo.variableNames.size) { "null3" }.joinToString (",")})",extractedField)
+                WriteCommandAction.runWriteCommandAction(project){
+                    containingClass.add(extractedField)
+                }
+            }
+        val constructorCall=extractedField.initializer as PsiCall
+       val paramPos=constructor.parameterList.parameters.indexOfFirst{it.name==usageInfo.name}
+
+       val argValue=if(field.initializer==null) getDefaultValueAsStringForType(field.type) else field.initializer!!.text
+        WriteCommandAction.runWriteCommandAction(project){
+            constructorCall.argumentList!!.expressions[paramPos].replace(JavaPsiFacade.getElementFactory(project).createExpressionFromText(argValue,field))
+            println("QWERTZ "+constructorCall.argumentList!!.expressions[paramPos].text)
+            field.delete()
+            commitAll(project)
+        }
+
+
+    }
+
+
+    fun getDefaultValueAsStringForType(type: PsiType): String {
+        val result= when (type.canonicalText) {
+            "int" -> "0"
+            "short" -> "0"
+            "long" -> "0L"
+            "float" -> "0.0f"
+            "double" -> "0.0"
+            "char" -> "'\\u0000'"
+            "byte" -> "0"
+            "boolean" -> "false"
+            else -> "null"
+        }
+        println(type.canonicalText + " " + result)
+        return  result
+    }
+
+
+
+    fun updateMethodUsage(project:Project,extractedClass: PsiClass,element:PsiElement,usageInfo: UsageInfo) {
+
+        val exprList = element.getParentOfType<PsiMethodCallExpression>(true)!!
+        val method = keyElementMap[usageInfo.originKey]!! as PsiMethod
+        val constructor=extractedClass.constructors.first { it.parameterList.parameters.size==usageInfo.variableNames.size }
+        if(constructor.parameterList.parameters.size!=exprList.argumentList.expressions.size){
+            return
+        }
+        val variableNames=keyVariableNamesMap[usageInfo.originKey]!!
+        val argsInOrder= Array<String>(variableNames.size){""}
+        val argsToDelete= mutableSetOf<Int>()
+        for(variableName in variableNames){
+            val paramPos=usageInfo.variableNames.indexOfFirst{ it==variableName }
+            val constructorParamPos=constructor.parameterList.parameters.indexOfFirst { it.name==variableName }
+            argsInOrder[constructorParamPos]=exprList.argumentList.expressions[paramPos].text
+            argsToDelete.add(paramPos)
+
+        }
+        val newExpr=JavaPsiFacade.getElementFactory(project).createExpressionFromText("new ${extractedClass.qualifiedName}(${argsInOrder.joinToString(",")})",exprList)
+        WriteCommandAction.runWriteCommandAction(project){
+            exprList.argumentList.add(newExpr)
+            var counter=0
+            for( arg in exprList.argumentList.expressions){
+                if(counter in argsToDelete){
+                    arg.delete()
+                }
+                counter++
+            }
+        }
+
+    }
+
     fun updateElementFromUsageInfo(project: Project,usageInfo: UsageInfo,element:PsiElement,nameService:IdentifierNameService) {
         val symbolType= UsageInfo.UsageType.values()[usageInfo.symbolType]
+        if(usageInfo.name=="printMax"){
+            toString();
+        }
         val man = VirtualFileManager.getInstance()
 
         if(usageInfo.extractedClassPath==null) return
@@ -160,23 +252,37 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                     toString()
                 }
                 println(usageInfo.symbolType)
-                updateVariableUsage(project,extractedClass,element as PsiIdentifier,PrimitiveNameService())
+                updateVariableUsage(project,extractedClass,element as PsiIdentifier,nameService)
                 println("####")
                 //git reset --hard && git clean -df
             }
             UsageInfo.UsageType.MethodDeclared->{
-                updateMethodSignature(project,element.getParentOfType<PsiMethod>(true)!!,extractedClass,usageInfo.variableNames,PrimitiveNameService())
+                val key=usageInfo.originKey
+                val method=element.getParentOfType<PsiMethod>(true)!!
+                keyElementMap[key]=method
+                keyVariableNamesMap[key]=usageInfo.variableNames.toSet()
+                updateMethodSignature(project,method,extractedClass,usageInfo.variableNames,nameService)
             }
-            else->{}
+            UsageInfo.UsageType.MethodUsed->{
+                updateMethodUsage(project,extractedClass,element,usageInfo)
+            }
+            UsageInfo.UsageType.VariableDeclared->{
+                updateFieldDeclarations(project,element,extractedClass,usageInfo,nameService)
+            }
         }
     }
+    val keyElementMap= mutableMapOf<String,PsiElement>()
+    val keyVariableNamesMap= mutableMapOf<String,Set<String>>()
     fun isValidElement(element:PsiElement,usageType: UsageInfo.UsageType):Boolean{
         if( element is PsiWhiteSpace || element is PsiComment)return false
         if( usageType== UsageInfo.UsageType.VariableUsed && element.parent?.let { it.nextSibling  is PsiExpressionList} == true) return false
         return true
     }
     fun getElement(project:Project,usageInfo: UsageInfo):PsiElement?{
-        println(usageInfo.filePath)
+        if(usageInfo.name=="printMax"){
+            toString();
+        }
+        println(usageInfo.name)
         val bufferedReader: BufferedReader =Path.of(this.projectPath.absolutePath,usageInfo.filePath).toFile().bufferedReader()
         val fileContent = bufferedReader.use { it.readText() }
         val offset=this.calculateOffset(fileContent,usageInfo.range.startLine,usageInfo.range.startColumn)
