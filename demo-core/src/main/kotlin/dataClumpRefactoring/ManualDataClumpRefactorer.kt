@@ -164,12 +164,13 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         val constructor=extractedClass.constructors.first { it.parameterList.parameters.size==usageInfo.variableNames.size }
        if(extractedField==null){
                 extractedField=JavaPsiFacade.getElementFactory(project).createField(extractedFieldName,type)
-           extractedField.initializer=JavaPsiFacade.getElementFactory(project).createExpressionFromText("new ${extractedClass.qualifiedName}(${Array(usageInfo.variableNames.size) { "null3" }.joinToString (",")})",extractedField)
+           extractedField.initializer=JavaPsiFacade.getElementFactory(project).createExpressionFromText("new ${extractedClass.qualifiedName}(${Array(usageInfo.variableNames.size) { "null" }.joinToString (",")})",extractedField)
                 WriteCommandAction.runWriteCommandAction(project){
-                    containingClass.add(extractedField)
+                    containingClass.add(extractedField!!)
                 }
+           extractedField= containingClass!!.childrenOfType<PsiField>().firstOrNull(){it.name==extractedFieldName}
             }
-        val constructorCall=extractedField.initializer as PsiCall
+        val constructorCall=extractedField!!.initializer as PsiCall
        val paramPos=constructor.parameterList.parameters.indexOfFirst{it.name==usageInfo.name}
 
        val argValue=if(field.initializer==null) getDefaultValueAsStringForType(field.type) else field.initializer!!.text
