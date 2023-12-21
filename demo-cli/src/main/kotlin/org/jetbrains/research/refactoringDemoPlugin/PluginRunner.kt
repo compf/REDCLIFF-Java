@@ -267,7 +267,15 @@ class DataClumpRefactorer : CliktCommand() {
       }
     
     """
-
+    fun calcDepth(element:PsiElement):Int{
+        var depth=0
+        var currentElement:PsiElement?=element
+        while(currentElement!=null){
+            depth++
+            currentElement=currentElement.parent
+        }
+        return depth
+    }
     override fun run() {
 
         VirtualFileManager.getInstance().syncRefresh()
@@ -304,8 +312,9 @@ class DataClumpRefactorer : CliktCommand() {
 
 
             }
+            val sorted=usageElementMap.entries.sortedWith(compareBy({it.key.symbolType},{-calcDepth(it.value)}))
             val nameService=PrimitiveNameService()
-            for(pair in usageElementMap){
+            for(pair in sorted){
                 try{
                     refactorer.updateElementFromUsageInfo(project,pair.key,pair.value,nameService)
                 }

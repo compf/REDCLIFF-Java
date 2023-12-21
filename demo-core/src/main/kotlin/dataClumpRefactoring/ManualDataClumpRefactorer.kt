@@ -206,7 +206,6 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
     fun updateMethodUsage(project:Project,extractedClass: PsiClass,element:PsiElement,usageInfo: UsageInfo) {
 
         val exprList = element.getParentOfType<PsiMethodCallExpression>(true)!!
-        val method = keyElementMap[usageInfo.originKey]!! as PsiMethod
         val constructor=extractedClass.constructors.first { it.parameterList.parameters.size==usageInfo.variableNames.size }
         if(constructor.parameterList.parameters.size!=exprList.argumentList.expressions.size){
             return
