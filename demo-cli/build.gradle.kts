@@ -13,11 +13,22 @@ abstract class IOCliTask : org.jetbrains.intellij.tasks.RunIdeTask() {
     val runner: String? by project
 
     @get:Input
-    val input: String? by project
+    val myProjectPath: String? by project
+
+
+    @get:Optional
+    @get:Input
+    val dcContextPath: String? by project
+
+    @get:Input
+    val usageContextPath: String? by project
 
     @get:Input
     val output: String? by project
 
+    @get:Optional
+    @get:Input
+    val runnerType: String? by project
     init {
         jvmArgs = listOf(
             "-Djava.awt.headless=true",
@@ -29,15 +40,27 @@ abstract class IOCliTask : org.jetbrains.intellij.tasks.RunIdeTask() {
         standardInput = System.`in`
         standardOutput = System.`out`
     }
+
+
+
 }
 
 tasks {
     register<IOCliTask>("runDemoPluginCLI") {
+        println("UsageContextPath: $usageContextPath")
+        println("Output: $output")
+        println("MyProjectPath: $myProjectPath")
         dependsOn("buildPlugin")
-        args = listOfNotNull(
+        args = listOf(
             runner,
-            input?.let { it },
-            output?.let { it }
-        )
+            myProjectPath,
+            "--dc-context-path=$dcContextPath",
+            "--usage-context-path=$usageContextPath",
+            "--output=$output",
+            "--runner-type=$runnerType",
+
+
+        ).filter { !it!!.endsWith("=null") }
     }
 }
+

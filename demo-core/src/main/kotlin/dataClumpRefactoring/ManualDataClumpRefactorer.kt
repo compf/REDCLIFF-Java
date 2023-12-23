@@ -230,6 +230,7 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                 }
                 counter++
             }
+            commitAll(project)
         }
 
     }
