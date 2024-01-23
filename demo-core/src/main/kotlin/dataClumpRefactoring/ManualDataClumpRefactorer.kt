@@ -123,6 +123,9 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         WriteCommandAction.runWriteCommandAction(project){
             constructorCall.argumentList!!.expressions[paramPos].replace(JavaPsiFacade.getElementFactory(project).createExpressionFromText(argValue,field))
             println("QWERTZ "+constructorCall.argumentList!!.expressions[paramPos].text)
+            if(field.nextSibling.text==","){
+                field.nextSibling.delete()
+            }
             field.delete()
             commitAll(project)
         }
