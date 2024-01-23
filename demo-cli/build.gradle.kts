@@ -23,8 +23,7 @@ abstract class IOCliTask : org.jetbrains.intellij.tasks.RunIdeTask() {
     @get:Input
     val usageContextPath: String? by project
 
-    @get:Input
-    val output: String? by project
+
 
     @get:Optional
     @get:Input
@@ -48,7 +47,6 @@ abstract class IOCliTask : org.jetbrains.intellij.tasks.RunIdeTask() {
 tasks {
     register<IOCliTask>("runDemoPluginCLI") {
         println("UsageContextPath: $usageContextPath")
-        println("Output: $output")
         println("MyProjectPath: $myProjectPath")
         dependsOn("buildPlugin")
         args = listOf(
@@ -56,7 +54,6 @@ tasks {
             myProjectPath,
             "--dc-context-path=$dcContextPath",
             "--usage-context-path=$usageContextPath",
-            "--output=$output",
             "--runner-type=$runnerType",
 
 

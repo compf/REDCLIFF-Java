@@ -15,74 +15,7 @@ import java.io.BufferedReader
 import java.nio.file.Path
 
 class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(projectPath) {
-    fun createClass(
-        project: Project,
-        className: String,
-        directory: PsiDirectory,
-        packageName: String,
-        relevantVariables: List<PsiVariable>
-    ): PsiClass {
-        var psiClass:PsiClass?=null
-        try {
-            commitAll(project)
-            waitForIndexing(project)
-             psiClass= WriteAction.compute<PsiClass, Throwable> {
-                val file = directory.findFile("Point.java")
-                val createdClass = JavaDirectoryService.getInstance().createClass(
-                    directory, className, JavaTemplateUtil.INTERNAL_CLASS_TEMPLATE_NAME, false,
-                    mapOf("PACKAGE_NAME" to packageName)
-                )
-                return@compute createdClass
-            }
-        } catch (e: Throwable) {
-            e.printStackTrace()
-            throw e
-        }
-        try {
-            WriteCommandAction.runWriteCommandAction(project) {
-                for (variable in relevantVariables) {
-                    val field = JavaPsiFacade.getElementFactory(project).createField(variable.name!!, variable.type)
-                    psiClass.add(field)
-                    val getterName="get${variable.name!!.replaceFirstChar { it.uppercase() }}"
-                    val getter = JavaPsiFacade.getElementFactory(project).createMethodFromText(
-                        "public ${variable.type.canonicalText } ${getterName}(){return ${variable.name};}",
-                        psiClass
-                    )
-                    val setterName="set${variable.name!!.replaceFirstChar { it.uppercase() }}"
-                    val setter = JavaPsiFacade.getElementFactory(project).createMethodFromText(
-                        "public void ${setterName}(${variable.type.canonicalText} ${variable.name}){this.${variable.name}=${variable.name};}",
-                        psiClass
-                    )
-                    psiClass.add(getter)
-                    psiClass.add(setter)
 
-                }
-                val constructor=JavaPsiFacade.getElementFactory(project).createConstructor()
-                for (variable in relevantVariables) {
-                    val parameter = JavaPsiFacade.getElementFactory(project).createParameter(variable.name!!, variable.type)
-                    constructor.parameterList.add(parameter)
-                    constructor.body?.add(JavaPsiFacade.getElementFactory(project).createStatementFromText("this.${variable.name}=${variable.name};",constructor))
-                }
-                psiClass.add(constructor)
-                nameClassMap[className] = psiClass
-
-
-
-            }
-        }catch (e: Throwable) {
-            e.printStackTrace()
-            throw e
-        }
-        commitAll(project)
-        return psiClass!!
-
-
-
-    }
-
-    fun findClass(className: String): PsiClass {
-        return nameClassMap[className]!!
-    }
 
     fun updateMethodSignature(project: Project,method:PsiMethod,extractedClass: PsiClass,relevantParameterNames: Array<String>,nameService: IdentifierNameService){
         if(method.parameterList.parameters.none{it.name in relevantParameterNames}){
@@ -272,6 +205,9 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
             }
         }
     }
+    fun nop(){
+
+    }
     val keyElementMap= mutableMapOf<String,PsiElement>()
     val keyVariableNamesMap= mutableMapOf<String,Set<String>>()
     fun isValidElement(element:PsiElement,usageType: UsageInfo.UsageType):Boolean{
@@ -294,6 +230,9 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
 
         val element=dataClumpFile.findElementAt(offset)
+        if(element==null){
+            nop()
+        }
         if(isValidElement(element!!, UsageInfo.UsageType.values()[usageInfo.symbolType])){
             println(usageInfo.name)
             println(usageInfo.range.startLine.toString() + " " + usageInfo.range.startColumn.toString())

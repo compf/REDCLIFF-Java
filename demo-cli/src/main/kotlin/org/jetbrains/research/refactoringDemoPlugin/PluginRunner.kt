@@ -65,7 +65,6 @@ class DataClumpRefactorer : CliktCommand() {
     argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
     private val dcContextPath by option(help = "Path to data clump type context file").file(canBeFile = true, mustExist = true)
     private val usageContextPath by option(help = "Path to  usage type context file").file(canBeFile = true, mustExist = true)
-    private val output by option(help = "Path to  context where extracted paths are stored").file(canBeFile = true, mustExist = false)
     private val runnerType by option(help = "Path to  name finding context file").default("manual")
     //https://github.com/JetBrains/intellij-community/blob/cb1f19a78bb9a4db29b33ff186cdb60ceab7f64c/java/java-impl-refactorings/src/com/intellij/refactoring/encapsulateFields/JavaEncapsulateFieldHelper.java#L86
 
