@@ -59,7 +59,20 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         }
         commitAll(identifier.project)
     }
-    fun updateVariableUsage(project: Project,extractedClass: PsiClass,identifier:PsiIdentifier,nameService:IdentifierNameService,usageInfo: UsageInfo){
+
+    private fun getRightSideOfAssignent(identifier: PsiIdentifier, nameService: IdentifierNameService,extractedClass: PsiClass): String {
+    val assignmentExpression=identifier.getParentOfType<PsiAssignmentExpression>(true)!!
+        val operators= arrayOf("+=","-=","*=","/=","%=","&=","|=","^=","<<=",">>=",">>>=")
+        if(operators.any{it==assignmentExpression.operationSign.text}){
+            val getterName = nameService.getGetterName(extractedClass, identifier.text!!)
+            return "${getterName}() ${assignmentExpression.operationSign.text.substring(0,assignmentExpression.operationSign.text.length-1)} ${assignmentExpression.rExpression!!.text}"
+        }
+        else{
+            return assignmentExpression.rExpression!!.text
+        }
+    }
+
+    fun updateVariableUsage(project: Project, extractedClass: PsiClass, identifier:PsiIdentifier, nameService:IdentifierNameService, usageInfo: UsageInfo){
             val getterName=nameService.getGetterName(extractedClass,identifier.text!!)
             val method=identifier.getParentOfType<PsiMethod>(true)
         if(method==null){
@@ -73,9 +86,9 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                 if(isOnLeftSideOfAssignemt(identifier)){
                     WriteCommandAction.runWriteCommandAction(project) {
                         var setterCall = JavaPsiFacade.getElementFactory(method.project).createExpressionFromText(
-                            "${objectName}.${nameService.getSetterName(extractedClass,identifier.text!!)}(${(identifier.getParentOfType<PsiAssignmentExpression>(true) as PsiAssignmentExpression).rExpression!!.text})",
-                            method
-                        )
+                            "${objectName}.${nameService.getSetterName(extractedClass,identifier.text!!)}(${getRightSideOfAssignent(identifier,nameService,extractedClass)})",method)
+
+
                         identifier.getParentOfType<PsiAssignmentExpression>(true)!!.replace(setterCall)
                         //(element.parent as PsiAssignmentExpression).rExpression?.replace(getterCall)
                     }
