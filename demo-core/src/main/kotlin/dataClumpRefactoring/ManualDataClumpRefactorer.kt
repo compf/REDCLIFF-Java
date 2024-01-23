@@ -4,13 +4,10 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.*
 import com.intellij.psi.PsiManager
-import  com.intellij.openapi.application.WriteAction
-import com.intellij.ide.fileTemplates.JavaTemplateUtil;
 import com.intellij.openapi.command.WriteCommandAction;
 import java.io.File
 import com.intellij.psi.util.childrenOfType
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
-import org.jetbrains.uast.java.JavaConstructorUCallExpression
 import java.io.BufferedReader
 import java.nio.file.Path
 
@@ -48,14 +45,27 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         }
         return (curr as PsiAssignmentExpression).lExpression==prev
     }
-    fun updateVariableUsage(project: Project,extractedClass: PsiClass,identifier:PsiIdentifier,nameService:IdentifierNameService){
+    fun handlePostfixPrefixOperation(identifier: PsiIdentifier,extractedClass: PsiClass,nameService: IdentifierNameService) {
+        val prefix = identifier.getParentOfType<PsiPrefixExpression>(true)
+        val expr = identifier.getParentOfType<PsiPostfixExpression>(true) ?: prefix
+        val getterName = nameService.getGetterName(extractedClass, identifier.text!!)
+        val setterName = nameService.getSetterName(extractedClass, identifier.text!!)
+        val objectName = nameService.getFieldName(extractedClass, identifier.getParentOfType<PsiClass>(true))
+
+        val command="${objectName}.${setterName}(${objectName}.${getterName}()+1);/*TODO postfix/prefix replaced*/"
+        WriteCommandAction.runWriteCommandAction(identifier.project) {
+            expr!!.parent!!.replace(JavaPsiFacade.getElementFactory(identifier.project).createStatementFromText(command, expr))
+        }
+        commitAll(identifier.project)
+    }
+    fun updateVariableUsage(project: Project,extractedClass: PsiClass,identifier:PsiIdentifier,nameService:IdentifierNameService,usageInfo: UsageInfo){
             val getterName=nameService.getGetterName(extractedClass,identifier.text!!)
             val method=identifier.getParentOfType<PsiMethod>(true)
         if(method==null){
             return;
         }
             val currentClass=identifier.getParentOfType<PsiClass>(true)
-            val objectName =if(identifier is  PsiField) nameService.getFieldName(extractedClass,currentClass) else nameService.getParameterName(extractedClass,method)
+            val objectName =if(usageInfo.isParameter) nameService.getParameterName(extractedClass,method) else "this."+nameService.getFieldName(extractedClass,currentClass)
             val getterCall=JavaPsiFacade.getElementFactory(method.project).createExpressionFromText("${objectName}.${getterName}()",method)
 
 
@@ -68,6 +78,9 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                         identifier.getParentOfType<PsiAssignmentExpression>(true)!!.replace(setterCall)
                         //(element.parent as PsiAssignmentExpression).rExpression?.replace(getterCall)
                     }
+                }
+                else if(identifier.getParentOfType<PsiPostfixExpression>(true) !=null|| identifier.getParentOfType<PsiPostfixExpression>(true)!=null){
+                    handlePostfixPrefixOperation(identifier,extractedClass,nameService)
                 }
                 else  {
                     val parent = identifier.parent
@@ -186,7 +199,7 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                     toString()
                 }
                 println(usageInfo.symbolType)
-                updateVariableUsage(project,extractedClass,element as PsiIdentifier,nameService)
+                updateVariableUsage(project,extractedClass,element as PsiIdentifier,nameService,usageInfo)
                 println("####")
                 //git reset --hard && git clean -df
             }
