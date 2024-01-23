@@ -7,6 +7,7 @@ import com.intellij.psi.PsiManager
 import com.intellij.openapi.command.WriteCommandAction;
 import java.io.File
 import com.intellij.psi.util.childrenOfType
+import org.jetbrains.kotlin.idea.completion.argList
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 import java.io.BufferedReader
 import java.nio.file.Path
@@ -152,9 +153,11 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
 
 
-    fun updateMethodUsage(project:Project,extractedClass: PsiClass,element:PsiElement,usageInfo: UsageInfo) {
+    fun updateMethodUsage(project:Project,extractedClass: PsiClass,element:PsiElement,usageInfo: UsageInfo,nameService: IdentifierNameService) {
+        val method=keyElementMap[usageInfo.originKey] as PsiMethod
 
         val exprList = element.getParentOfType<PsiMethodCallExpression>(true)!!
+        val containingMethod=element.getParentOfType<PsiMethod>(true)!!
         val constructor=extractedClass.constructors.first { it.parameterList.parameters.size==usageInfo.variableNames.size }
         if(constructor.parameterList.parameters.size!=exprList.argumentList.expressions.size){
             return
@@ -169,9 +172,16 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
             argsToDelete.add(paramPos)
 
         }
-        val newExpr=JavaPsiFacade.getElementFactory(project).createExpressionFromText("new ${extractedClass.qualifiedName}(${argsInOrder.joinToString(",")})",exprList)
+        val insertionPos=method.parameterList.parameters.indexOfFirst { it.type.canonicalText==extractedClass.qualifiedName }
+
+        var newExpr=JavaPsiFacade.getElementFactory(project).createExpressionFromText("new ${extractedClass.qualifiedName}(${argsInOrder.joinToString(",")})",exprList)
+        if(method.parameterList.parameters[insertionPos].type.canonicalText==extractedClass.qualifiedName){
+            val paramName=nameService.getParameterName(extractedClass,containingMethod)
+            val name=if(containingMethod.parameterList.parameters.any{it.name==paramName})paramName else nameService.getFieldName(extractedClass,containingMethod.getParentOfType<PsiClass>(true))
+            newExpr=JavaPsiFacade.getElementFactory(project).createExpressionFromText(name,containingMethod)
+        }
         WriteCommandAction.runWriteCommandAction(project){
-            exprList.argumentList.add(newExpr)
+
             var counter=0
             for( arg in exprList.argumentList.expressions){
                 if(counter in argsToDelete){
@@ -179,8 +189,16 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                 }
                 counter++
             }
+            if(exprList.argumentList.expressionCount==0){
+                exprList.argumentList.add(newExpr)
+
+            }
+            else{
+                exprList.argumentList.addAfter(newExpr,exprList.argumentList.expressions[insertionPos])
+            }
             commitAll(project)
         }
+
 
     }
 
@@ -214,7 +232,7 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                 updateMethodSignature(project,method,extractedClass,usageInfo.variableNames,nameService)
             }
             UsageInfo.UsageType.MethodUsed->{
-                updateMethodUsage(project,extractedClass,element,usageInfo)
+                updateMethodUsage(project,extractedClass,element,usageInfo,nameService)
             }
             UsageInfo.UsageType.VariableDeclared->{
                 updateFieldDeclarations(project,element,extractedClass,usageInfo,nameService)
