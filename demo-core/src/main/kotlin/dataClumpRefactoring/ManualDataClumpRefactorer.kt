@@ -126,7 +126,7 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
        if(extractedField==null){
                 extractedField=JavaPsiFacade.getElementFactory(project).createField(extractedFieldName,type)
            //extractedField.modifierList!!.replace(JavaPsiFacade.getElementFactory(project).createKeyword("public"))
-           extractedField.modifierList!!.setModifierProperty("public",true)
+           //extractedField.modifierList!!.setModifierProperty("public",true)
            extractedField.initializer=JavaPsiFacade.getElementFactory(project).createExpressionFromText("new ${extractedClass.qualifiedName}(${Array(usageInfo.variableNames.size) { "null" }.joinToString (",")})",extractedField)
                 WriteCommandAction.runWriteCommandAction(project){
                     containingClass.add(extractedField!!)
@@ -138,6 +138,8 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
        val argValue=if(field.initializer==null) getDefaultValueAsStringForType(field.type) else field.initializer!!.text
         WriteCommandAction.runWriteCommandAction(project){
+            extractedField.modifierList!!.setModifierProperty("protected",field.modifierList!!.hasModifierProperty("protected"))
+            extractedField.modifierList!!.setModifierProperty("public",field.modifierList!!.hasModifierProperty("public"))
             constructorCall.argumentList!!.expressions[paramPos].replace(JavaPsiFacade.getElementFactory(project).createExpressionFromText(argValue,field))
             if(field.nextSibling.text==","){
                 field.nextSibling.delete()
