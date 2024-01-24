@@ -103,7 +103,6 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                         identifier.replace(getterCall)
                     }
 
-                    println(parent)
                 }
                 commitAll(project)
 
@@ -164,7 +163,6 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
             "boolean" -> "false"
             else -> "null"
         }
-        println(type.canonicalText + " " + result)
         return  result
     }
 
@@ -221,24 +219,15 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
     fun updateElementFromUsageInfo(project: Project,usageInfo: UsageInfo,element:PsiElement,nameService:IdentifierNameService) {
         val symbolType= UsageInfo.UsageType.values()[usageInfo.symbolType]
-        if(usageInfo.name=="printMax"){
-            toString();
-        }
+
         val man = VirtualFileManager.getInstance()
 
         if(usageInfo.extractedClassPath==null) return
-        println(getURI(usageInfo.extractedClassPath))
         val extractedClassFile= PsiManager.getInstance(project).findFile(man.findFileByUrl(getURI(usageInfo.extractedClassPath)!!)!!)!!
         val extractedClass=extractedClassFile.childrenOfType<PsiClass>().first()
         when(symbolType){
             UsageInfo.UsageType.VariableUsed->{
-                println("####")
-                if(usageInfo.range.startLine==21){
-                    toString()
-                }
-                println(usageInfo.symbolType)
                 updateVariableUsage(project,extractedClass,element as PsiIdentifier,nameService,usageInfo)
-                println("####")
                 //git reset --hard && git clean -df
             }
             UsageInfo.UsageType.MethodDeclared->{
@@ -267,10 +256,6 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         return true
     }
     fun getElement(project:Project,usageInfo: UsageInfo):PsiElement?{
-        if(usageInfo.name=="printMax"){
-            toString();
-        }
-        println(usageInfo.name)
         val bufferedReader: BufferedReader =Path.of(this.projectPath.absolutePath,usageInfo.filePath).toFile().bufferedReader()
         val fileContent = bufferedReader.use { it.readText() }
         val offset=this.calculateOffset(fileContent,usageInfo.range.startLine,usageInfo.range.startColumn)
@@ -281,14 +266,7 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
 
         val element=dataClumpFile.findElementAt(offset)
-        if(element==null){
-            nop()
-        }
         if(isValidElement(element!!, UsageInfo.UsageType.values()[usageInfo.symbolType])){
-            println(usageInfo.name)
-            println(usageInfo.range.startLine.toString() + " " + usageInfo.range.startColumn.toString())
-            print(element)
-            println()
             return element!!
         }
         else{
