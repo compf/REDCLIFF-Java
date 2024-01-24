@@ -37,14 +37,8 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
     }
     fun isOnLeftSideOfAssignemt(element:PsiElement):Boolean{
-       var curr:PsiElement?=element
-        var prev:PsiElement?=element
-        while(curr !is  PsiAssignmentExpression){
-            prev=curr
-            curr=curr?.parent
-            if(curr==null) return false
-        }
-        return (curr as PsiAssignmentExpression).lExpression==prev
+        return element.parent.parent is PsiAssignmentExpression && (element.parent.parent as PsiAssignmentExpression).lExpression==element.parent
+
     }
     fun handlePostfixPrefixOperation(identifier: PsiIdentifier,extractedClass: PsiClass,nameService: IdentifierNameService) {
         val prefix = identifier.getParentOfType<PsiPrefixExpression>(true)
