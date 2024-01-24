@@ -60,16 +60,21 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         commitAll(identifier.project)
     }
 
-    private fun getRightSideOfAssignent(identifier: PsiIdentifier, nameService: IdentifierNameService,extractedClass: PsiClass): String {
+    private fun getRightSideOfAssignent(identifier: PsiIdentifier, nameService: IdentifierNameService,extractedClass: PsiClass,usageInfo: UsageInfo,method: PsiMethod,currentClass: PsiClass?): String {
     val assignmentExpression=identifier.getParentOfType<PsiAssignmentExpression>(true)!!
         val operators= arrayOf("+=","-=","*=","/=","%=","&=","|=","^=","<<=",">>=",">>>=")
         if(operators.any{it==assignmentExpression.operationSign.text}){
-            val getterName = nameService.getGetterName(extractedClass, identifier.text!!)
-            return "${getterName}() ${assignmentExpression.operationSign.text.substring(0,assignmentExpression.operationSign.text.length-1)} ${assignmentExpression.rExpression!!.text}"
+            val getterCall = getGetterCallText(nameService,extractedClass,identifier,usageInfo,method,currentClass)
+            return "$getterCall ${assignmentExpression.operationSign.text.substring(0,assignmentExpression.operationSign.text.length-1)} ${assignmentExpression.rExpression!!.text}"
         }
         else{
             return assignmentExpression.rExpression!!.text
         }
+    }
+    private fun getGetterCallText(nameService: IdentifierNameService,extractedClass: PsiClass,identifier: PsiIdentifier,usageInfo: UsageInfo,method:PsiMethod,currentClass:PsiClass?): String {
+        val getterName=nameService.getGetterName(extractedClass,identifier.text!!)
+        val objectName =if(usageInfo.isParameter) nameService.getParameterName(extractedClass,method) else nameService.getFieldName(extractedClass,currentClass)
+        return "${objectName}.${getterName}()"
     }
 
     fun updateVariableUsage(project: Project, extractedClass: PsiClass, identifier:PsiIdentifier, nameService:IdentifierNameService, usageInfo: UsageInfo){
@@ -79,17 +84,19 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
             return;
         }
             val currentClass=identifier.getParentOfType<PsiClass>(true)
-            val objectName =if(usageInfo.isParameter) nameService.getParameterName(extractedClass,method) else "this."+nameService.getFieldName(extractedClass,currentClass)
-            val getterCall=JavaPsiFacade.getElementFactory(method.project).createExpressionFromText("${objectName}.${getterName}()",method)
+            val objectName =if(usageInfo.isParameter) nameService.getParameterName(extractedClass,method) else nameService.getFieldName(extractedClass,currentClass)
+            val getterCall=JavaPsiFacade.getElementFactory(method.project).createExpressionFromText(getGetterCallText(nameService,extractedClass,identifier,usageInfo,method,currentClass),method)
 
 
                 if(isOnLeftSideOfAssignemt(identifier)){
                     WriteCommandAction.runWriteCommandAction(project) {
                         var setterCall = JavaPsiFacade.getElementFactory(method.project).createExpressionFromText(
-                            "${objectName}.${nameService.getSetterName(extractedClass,identifier.text!!)}(${getRightSideOfAssignent(identifier,nameService,extractedClass)})",method)
+                            "${objectName}.${nameService.getSetterName(extractedClass,identifier.text!!)}(${getRightSideOfAssignent(identifier,nameService,extractedClass,usageInfo,method,currentClass)})",method)
 
-
-                        identifier.getParentOfType<PsiAssignmentExpression>(true)!!.replace(setterCall)
+                        val assignmentExpression=identifier.getParentOfType<PsiAssignmentExpression>(true)!!
+                        var newEle=identifier as PsiElement
+                       newEle= newEle.replace(setterCall)
+                        assignmentExpression.replace(newEle.parent)
                         //(element.parent as PsiAssignmentExpression).rExpression?.replace(getterCall)
                     }
                 }
@@ -124,6 +131,8 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         val constructor=extractedClass.constructors.first { it.parameterList.parameters.size==usageInfo.variableNames.size }
        if(extractedField==null){
                 extractedField=JavaPsiFacade.getElementFactory(project).createField(extractedFieldName,type)
+           //extractedField.modifierList!!.replace(JavaPsiFacade.getElementFactory(project).createKeyword("public"))
+           extractedField.modifierList!!.setModifierProperty("public",true)
            extractedField.initializer=JavaPsiFacade.getElementFactory(project).createExpressionFromText("new ${extractedClass.qualifiedName}(${Array(usageInfo.variableNames.size) { "null" }.joinToString (",")})",extractedField)
                 WriteCommandAction.runWriteCommandAction(project){
                     containingClass.add(extractedField!!)
@@ -136,7 +145,6 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
        val argValue=if(field.initializer==null) getDefaultValueAsStringForType(field.type) else field.initializer!!.text
         WriteCommandAction.runWriteCommandAction(project){
             constructorCall.argumentList!!.expressions[paramPos].replace(JavaPsiFacade.getElementFactory(project).createExpressionFromText(argValue,field))
-            println("QWERTZ "+constructorCall.argumentList!!.expressions[paramPos].text)
             if(field.nextSibling.text==","){
                 field.nextSibling.delete()
             }
