@@ -11,10 +11,10 @@ RUN apt-get update \
 ENV JAVA_HOME /usr/lib/jvm/java-17-openjdk-amd64
 
 # Download and extract IntelliJ IDEA
-RUN wget https://download.jetbrains.com/idea/ideaIC-2023.2.tar.gz \
-    && tar -xzf ideaIC-2023.2.tar.gz \
-    && rm ideaIC-2023.2.tar.gz \
-    && mv idea-* idea
+#RUN wget https://download.jetbrains.com/idea/ideaIC-2023.2.tar.gz \
+   # && tar -xzf ideaIC-2023.2.tar.gz \
+   # && rm ideaIC-2023.2.tar.gz \
+   # && mv idea-* idea
 
 # Set the JAVA_HOME for IntelliJ IDEA
 RUN echo "idea.jdk=$JAVA_HOME" >> /app/idea/bin/idea.properties

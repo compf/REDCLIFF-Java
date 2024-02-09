@@ -84,53 +84,58 @@ class DataClumpRefactorer : CliktCommand() {
         val projectManager = ProjectManagerEx.getInstanceEx()
         projectManager.closeAndDisposeAllProjects(true)
         val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(myProjectPath)
-
-        val project=projectManager.loadAndOpenProject(myProjectPath.absolutePath)!!
-        PsiManager.getInstance(project).dropPsiCaches()
-        val session=RefreshQueue.getInstance().createSession(false,true){
-
-        }
-
-        session.launch()
-
-        try{
-            val typeToken = object : TypeToken<Map<String, List<UsageInfo>>>() {}.type
-            val usages=Gson().fromJson<Map<String,List<UsageInfo>>> (java.nio.file.Files.readString(usageContextPath!!.toPath()),typeToken)
-            val usageElementMap=mutableMapOf<UsageInfo,PsiElement>()
-            for(key in usages.keys){
-
-               for(usg in usages[key]!!){
+        val opener=getKotlinJavaRepositoryOpener()
+       val a=opener.openRepository(myProjectPath) {
 
 
-                   val pos = usg.range
-                   val ele=refactorer.getElement(
-                       project,
-                      usg
-                   )
-                   ele?.let{
-                       usageElementMap[usg]=ele
+           val project = it
+
+           try {
+               val typeToken = object : TypeToken<Map<String, List<UsageInfo>>>() {}.type
+               val usages = Gson().fromJson<Map<String, List<UsageInfo>>>(
+                   java.nio.file.Files.readString(usageContextPath!!.toPath()),
+                   typeToken
+               )
+               val usageElementMap = mutableMapOf<UsageInfo, PsiElement>()
+               for (key in usages.keys) {
+
+                   for (usg in usages[key]!!) {
+
+
+                       val pos = usg.range
+                       val ele = refactorer.getElement(
+                           project,
+                           usg
+                       )
+                       ele?.let {
+                           usageElementMap[usg] = ele
+                       }
+
+                   }
+
+
+               }
+               val sorted =
+                   usageElementMap.entries.sortedWith(compareBy({ it.key.symbolType }, { -calcDepth(it.value) }))
+               val nameService = PrimitiveNameService()
+               for (pair in sorted) {
+                   try {
+                       refactorer.updateElementFromUsageInfo(project, pair.key, pair.value, nameService)
+                   } catch (ex: Throwable) {
+                       ex.printStackTrace()
                    }
 
                }
 
 
-            }
-            val sorted=usageElementMap.entries.sortedWith(compareBy({it.key.symbolType},{-calcDepth(it.value)}))
-            val nameService=PrimitiveNameService()
-            for(pair in sorted){
-                try{
-                    refactorer.updateElementFromUsageInfo(project,pair.key,pair.value,nameService)
-                }
-                catch (ex:Throwable){
-                    ex.printStackTrace()
-                }
+           }
+              catch (ex:Throwable){
+                ex.printStackTrace()
+              }
+           return@openRepository true
+       }
 
-            }
-        }
 
-        catch (ex:Throwable){
-            ex.printStackTrace()
-        }
 
 
 
@@ -139,7 +144,6 @@ class DataClumpRefactorer : CliktCommand() {
         println("### finnished refactor")
 
         println("### saving")
-        PsiDocumentManager.getInstance(project).commitAllDocuments()
         println("### exiting")
         Thread.sleep(10*1000)
         exitProcess(0)

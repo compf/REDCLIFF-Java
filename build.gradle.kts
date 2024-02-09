@@ -9,7 +9,12 @@ plugins {
     id("org.jetbrains.intellij") version "1.13.2" apply true
     id("org.jlleitschuh.gradle.ktlint") version "10.0.0" apply true
 }
+/*dependencies {
+    implementation("$utilitiesProjectName:plugin-utilities-core") {
 
+    }
+
+}*/
 allprojects {
     apply {
         plugin("java")
@@ -23,6 +28,7 @@ allprojects {
         mavenCentral()
         maven("https://packages.jetbrains.team/maven/p/ki/maven")
     }
+
 
     intellij {
         version.set(properties("platformVersion"))

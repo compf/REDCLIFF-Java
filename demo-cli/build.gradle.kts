@@ -1,5 +1,6 @@
 group = rootProject.group
 version = rootProject.version
+val utilitiesProjectName = "org.jetbrains.research.pluginUtilities"
 
 dependencies {
     implementation("com.github.ajalt:clikt:2.8.0")
