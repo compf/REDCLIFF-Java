@@ -30,6 +30,8 @@ import io.ktor.util.date.*
 import com.intellij.openapi.project.ex.ProjectManagerEx
 import dataClumpRefactoring.*
 import com.google.gson.reflect.TypeToken
+import com.intellij.openapi.application.ReadAction
+import java.nio.file.Path
 
 object PluginRunner : ApplicationStarter {
     @Deprecated("Specify it as `id` for extension definition in a plugin descriptor")
@@ -37,7 +39,7 @@ object PluginRunner : ApplicationStarter {
         get() = "DemoPluginCLI"
 
     override val requiredModality: Int
-        get() = ApplicationStarter.ANY_MODALITY
+        get() =ApplicationStarter.NOT_IN_EDT
 
     override fun main(args: List<String>) {
         DataClumpRefactorer().main(args.drop(1))
@@ -80,60 +82,52 @@ class DataClumpRefactorer : CliktCommand() {
     override fun run() {
         println("### starting refactor")
 
-        VirtualFileManager.getInstance().syncRefresh()
-        val projectManager = ProjectManagerEx.getInstanceEx()
-        projectManager.closeAndDisposeAllProjects(true)
+        //VirtualFileManager.getInstance().syncRefresh()
+       // val projectManager = ProjectManagerEx.getInstanceEx()
+       // projectManager.closeAndDisposeAllProjects(true)
         val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(myProjectPath)
+        //var projectPath="/home/compf/data/uni/master/sem4/intelliJTest"
         val opener=getKotlinJavaRepositoryOpener()
-       val a=opener.openRepository(myProjectPath) {
+        print("init")
+        try {
+            val a = opener.openProjectWithResolve(myProjectPath.toPath()) {
 
 
-           val project = it
+                val project = it
+                ApplicationManager.getApplication().invokeAndWait {
+                    val dcContext = Gson().fromJson<DataClumpsTypeContext>(
+                        java.nio.file.Files.readString(dcContextPath!!.toPath()),
+                        DataClumpsTypeContext::class.java
+                    )
 
-           try {
-               val typeToken = object : TypeToken<Map<String, List<UsageInfo>>>() {}.type
-               val usages = Gson().fromJson<Map<String, List<UsageInfo>>>(
-                   java.nio.file.Files.readString(usageContextPath!!.toPath()),
-                   typeToken
-               )
-               val usageElementMap = mutableMapOf<UsageInfo, PsiElement>()
-               for (key in usages.keys) {
+                    var counter=0
+                    for ((key, value) in dcContext.data_clumps) {
+                        println("Starting refactor $key")
+                        refactorer.refactorDataClump(project, SuggestedNameWithDataClumpTypeContext("Test"+counter, value))
+                        println("### refactored $key")
+                        refactorer.commitAll(project)
+                        counter++
 
-                   for (usg in usages[key]!!) {
-
-
-                       val pos = usg.range
-                       val ele = refactorer.getElement(
-                           project,
-                           usg
-                       )
-                       ele?.let {
-                           usageElementMap[usg] = ele
-                       }
-
-                   }
+                    }
+                }
 
 
-               }
-               val sorted =
-                   usageElementMap.entries.sortedWith(compareBy({ it.key.symbolType }, { -calcDepth(it.value) }))
-               val nameService = PrimitiveNameService()
-               for (pair in sorted) {
-                   try {
-                       refactorer.updateElementFromUsageInfo(project, pair.key, pair.value, nameService)
-                   } catch (ex: Throwable) {
-                       ex.printStackTrace()
-                   }
-
-               }
 
 
-           }
-              catch (ex:Throwable){
-                ex.printStackTrace()
-              }
-           return@openRepository true
-       }
+
+
+
+
+
+
+
+                return@openProjectWithResolve true
+            }
+        }
+        catch (ex:Throwable){
+            throw ex
+        }
+
 
 
 

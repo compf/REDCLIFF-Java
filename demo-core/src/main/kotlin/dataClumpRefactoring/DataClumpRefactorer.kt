@@ -24,7 +24,7 @@ import com.intellij.psi.impl.source.PsiParameterImpl;
 import javaslang.Tuple
 import javaslang.Tuple3
 
-class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String) {}
+class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String,val nameTypesPair: List<Pair<String,String>>) {}
 
 open class DataClumpRefactorer(private val projectPath:File) {
     fun getURI(path: String): String? {
@@ -45,21 +45,23 @@ open class DataClumpRefactorer(private val projectPath:File) {
                 getURI(context.from_file_path)!!,
                 context.from_class_or_interface_name,
                 context.from_method_name,
-                dataClumpTypeSplitted[0]
+                dataClumpTypeSplitted[0],
+                context.data_clump_data.values.map { Pair(it.name,it.type)}
             ),
             DataClumpEndpoint(
                 getURI(context.to_file_path)!!,
                 context.to_class_or_interface_name,
                 context.to_method_name,
-                dataClumpTypeSplitted[2]
+                dataClumpTypeSplitted[2],
+                context.data_clump_data.values.map { Pair(it.to_variable.name,it.to_variable.type)}
             )
         )
 
         var loopedOnce=false
         for (ep in endpoints) {
 
-            refactorDataClumpEndpoint(ep.dataClumpType,project, suggestedClassName,suggestedClassName in nameClassMap || loopedOnce ,ep,context.data_clump_data.values.map { it.name }.toSet())
-            loopedOnce=true
+            loopedOnce=refactorDataClumpEndpoint(ep.dataClumpType,project, suggestedClassName,suggestedClassName in nameClassMap || loopedOnce ,ep,context.data_clump_data.values.map { it.name }.toSet())
+
             commit(project,ep.filePath)
 
         }
@@ -157,7 +159,7 @@ open class DataClumpRefactorer(private val projectPath:File) {
         }
         return fields.toList()
     }
-    protected open fun refactorDataClumpEndpoint(dataClumpType:String, project: Project, suggestedClassName: String, classProbablyExisting:Boolean, ep:DataClumpEndpoint, relevantParameters:Set<String>){
+    protected open fun refactorDataClumpEndpoint(dataClumpType:String, project: Project, suggestedClassName: String, classProbablyExisting:Boolean, ep:DataClumpEndpoint, relevantParameters:Set<String>): Boolean {
         val man = VirtualFileManager.getInstance()
         val vFile = man.findFileByUrl(ep.filePath)!!
         val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
@@ -174,6 +176,9 @@ open class DataClumpRefactorer(private val projectPath:File) {
             val  data=getMethodAndParamsToRefactor(dataClumpClass,ep.methodName!!,relevantParameters)
             val method=data._1
             val parameterInfos=data._2
+            if(parameterInfos.size< MIN_SIZE_OF_DATA_CLUMP){
+                return false
+            }
             val descriptor:JavaIntroduceParameterObjectClassDescriptor;
                 if(classProbablyExisting){
                     descriptor=JavaKeepExistingClassIntroduceParameterObjectDescriptor(packageName,moveDestination,nameClassMap[suggestedClassName]!!,false,"public",parameterInfos.toTypedArray(),method,true)
@@ -198,6 +203,7 @@ open class DataClumpRefactorer(private val projectPath:File) {
             println("### running")
             processor.run()
             nameClassMap[suggestedClassName]=descriptor.existingClass
+            return true
         }
 
         else if(dataClumpType=="fields"){
@@ -264,6 +270,8 @@ open class DataClumpRefactorer(private val projectPath:File) {
             else{
                 nameClassMap[suggestedClassName]=extractClassProcessor.createdClass
             }
+
         }
+        return true
     }
 }
