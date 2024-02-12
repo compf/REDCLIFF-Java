@@ -156,9 +156,9 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                 )
 
                 val assignmentExpression = identifier.getParentOfType<PsiAssignmentExpression>(true)!!
-                var newEle = identifier as PsiElement
+                var newEle = identifier.lastChild as PsiElement
                 newEle = newEle.replace(setterCall)
-                assignmentExpression.replace(newEle)
+                assignmentExpression.replace(newEle.parent)
                 //(element.parent as PsiAssignmentExpression).rExpression?.replace(getterCall)
             }
         } else if (identifier.getParentOfType<PsiPostfixExpression>(true) != null || identifier.getParentOfType<PsiPostfixExpression>(
@@ -169,7 +169,7 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         } else {
             val parent = identifier.parent
             WriteCommandAction.runWriteCommandAction(project) {
-                identifier.replace(getterCall)
+                identifier.lastChild.replace(getterCall)
             }
 
         }
@@ -436,6 +436,18 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
         return null
     }
+    fun calcDepth(element:PsiElement):Int{
+        var depth=0
+        var currentElement:PsiElement?=element
+        while(currentElement!=null){
+            depth++
+            currentElement=currentElement.parent
+        }
+        return depth
+    }
+    fun sortReferencesByDepth(references:Iterable<PsiReference>):List<PsiElement>{
+        return references.sortedBy { -calcDepth(it.element) }.map { it.element }
+    }
 
 
     override fun refactorDataClumpEndpoint(
@@ -473,24 +485,37 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
                 for (param in overridingMethod.parameters) {
                     if(param.name !in relevantParameters) continue
-                    val references = ReferencesSearch.search(param.sourceElement!!).findAll()
-                    for (ref in references) {
-                        val element = ref.element
+                    val references = sortReferencesByDepth(ReferencesSearch.search(param.sourceElement!!).findAll())
+                    for (element in references) {
+
                         updateVariableUsage(project, extractedClass, element, nameService, true)
                     }
 
                 }
+                val overridingMethodUsages=ReferencesSearch.search(overridingMethod).findAll()
                 updateMethodSignature(project, overridingMethod, extractedClass, relevantParameters.toTypedArray(), nameService)
+
+                for (ref in overridingMethodUsages) {
+                    val element = ref.element
+                    updateMethodUsage(
+                        project,
+                        extractedClass,
+                        element,
+                        overridingMethod,
+                        nameService,
+                        relevantParameters.toTypedArray()
+                    )
+                }
             }
             for (param in method.parameterList.parameters) {
                 if(param.name !in relevantParameters) continue
-                val references = ReferencesSearch.search(param).findAll()
-                for (ref in references) {
-                    val element = ref.element
+                val references = sortReferencesByDepth( ReferencesSearch.search(param).findAll())
+                for (element in references) {
                     updateVariableUsage(project, extractedClass, element, nameService, true)
                 }
 
             }
+            updateMethodSignature(project, method, extractedClass, relevantParameters.toTypedArray(), nameService)
 
             for (ref in methodUsages) {
                 val element = ref.element
@@ -503,7 +528,6 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                     relevantParameters.toTypedArray()
                 )
             }
-            updateMethodSignature(project, method, extractedClass, relevantParameters.toTypedArray(), nameService)
 
 
 

@@ -70,15 +70,7 @@ class DataClumpRefactorer : CliktCommand() {
     private val runnerType by option(help = "Path to  name finding context file").default("manual")
     //https://github.com/JetBrains/intellij-community/blob/cb1f19a78bb9a4db29b33ff186cdb60ceab7f64c/java/java-impl-refactorings/src/com/intellij/refactoring/encapsulateFields/JavaEncapsulateFieldHelper.java#L86
 
-    fun calcDepth(element:PsiElement):Int{
-        var depth=0
-        var currentElement:PsiElement?=element
-        while(currentElement!=null){
-            depth++
-            currentElement=currentElement.parent
-        }
-        return depth
-    }
+
     override fun run() {
         println("### starting refactor")
 
@@ -109,6 +101,12 @@ class DataClumpRefactorer : CliktCommand() {
                         counter++
 
                     }
+                    println("### starting refactor")
+                    println("### finnished refactor")
+
+                    println("### saving")
+                    println("### exiting")
+                    Thread.sleep(10*1000)
                 }
 
 
@@ -134,12 +132,7 @@ class DataClumpRefactorer : CliktCommand() {
 
 
 
-        println("### starting refactor")
-        println("### finnished refactor")
 
-        println("### saving")
-        println("### exiting")
-        Thread.sleep(10*1000)
         exitProcess(0)
     }
 }
