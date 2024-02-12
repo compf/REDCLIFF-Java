@@ -30,6 +30,7 @@ import io.ktor.util.date.*
 import com.intellij.openapi.project.ex.ProjectManagerEx
 import dataClumpRefactoring.*
 import com.google.gson.reflect.TypeToken
+import com.intellij.ide.impl.ProjectUtil
 import com.intellij.openapi.application.ReadAction
 import java.nio.file.Path
 
@@ -71,6 +72,102 @@ class DataClumpRefactorer : CliktCommand() {
     //https://github.com/JetBrains/intellij-community/blob/cb1f19a78bb9a4db29b33ff186cdb60ceab7f64c/java/java-impl-refactorings/src/com/intellij/refactoring/encapsulateFields/JavaEncapsulateFieldHelper.java#L86
 
 
+    interface ProjectLoader{
+        fun loadProject(path: Path,executor:PluginExecutor):Project
+    }
+    class PluginExecutor(val myProjectPath:File, val dcContextPath:File?, val usageContextPath:File?){
+        fun executePlugin(project: Project){
+            ApplicationManager.getApplication().invokeAndWait() {
+                val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(myProjectPath)
+                val dcContext = Gson().fromJson<DataClumpsTypeContext>(
+                    java.nio.file.Files.readString(dcContextPath!!.toPath()),
+                    DataClumpsTypeContext::class.java
+                )
+
+                var counter=0
+                for ((key, value) in dcContext.data_clumps) {
+                    println("Starting refactor $key")
+                    refactorer.refactorDataClump(project, SuggestedNameWithDataClumpTypeContext("Test"+counter, value))
+                    println("### refactored $key")
+                    refactorer.commitAll(project)
+                    counter++
+
+                }
+                println("### starting refactor")
+                println("### finnished refactor")
+
+                println("### saving")
+                println("### exiting")
+                Thread.sleep(10*1000)
+                    }
+
+        }
+    }
+    class OpenProjectWithResolveLoader:ProjectLoader{
+        override fun loadProject(path: Path,executor: PluginExecutor): Project {
+            val opener=getKotlinJavaRepositoryOpener()
+            var resultingProject:Project?=null
+            var result= opener.openProjectWithResolve(path) {
+                val project = it
+                executor.executePlugin(project)
+                resultingProject=project
+                return@openProjectWithResolve true
+
+            }
+            return resultingProject!!
+        }
+    }
+    class OpenMavenOrGradleWithResolveLoader:ProjectLoader{
+        override fun loadProject(path: Path,executor: PluginExecutor): Project {
+            val opener=getKotlinJavaRepositoryOpener()
+            var resultingProject:Project?=null
+            try{
+                var result= opener.openSingleProject(path) {
+                    val project = it
+                   executor.executePlugin(project)
+                    return@openSingleProject true
+
+                }
+            }
+            catch (e:Exception){
+                println("### error")
+                println(e)
+                throw e
+            }
+            return resultingProject!!
+        }
+    }
+    class OpenProjectLoader:ProjectLoader{
+        override fun loadProject(path: Path,executor: PluginExecutor): Project {
+            try {
+                val result=ProjectUtil.openProject(path.toString(),null,true)
+                executor.executePlugin(result!!)
+                return result!!
+            }catch (e:Exception) {
+                println("### error")
+                println(e)
+                throw e
+            }
+
+        }
+    }
+    class LoadAndOpenProjectLoader:ProjectLoader{
+        override fun loadProject(path: Path,executor: PluginExecutor): Project {
+            try {
+                val projectManager = ProjectManager.getInstance()
+                val project = projectManager.loadAndOpenProject(path.toString())!!
+                executor.executePlugin(project)
+                return project
+            }
+            catch (e:Exception){
+                println("### error")
+                println(e)
+                throw e
+            }
+
+        }
+    }
+
     override fun run() {
         println("### starting refactor")
 
@@ -79,57 +176,18 @@ class DataClumpRefactorer : CliktCommand() {
        // projectManager.closeAndDisposeAllProjects(true)
         val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(myProjectPath)
         //var projectPath="/home/compf/data/uni/master/sem4/intelliJTest"
-        val opener=getKotlinJavaRepositoryOpener()
+        val opener=OpenMavenOrGradleWithResolveLoader()
         print("init")
-        try {
-            val a = opener.openProjectWithResolve(myProjectPath.toPath()) {
-
-
-                val project = it
-                ApplicationManager.getApplication().invokeAndWait {
-                    val dcContext = Gson().fromJson<DataClumpsTypeContext>(
-                        java.nio.file.Files.readString(dcContextPath!!.toPath()),
-                        DataClumpsTypeContext::class.java
-                    )
-
-                    var counter=0
-                    for ((key, value) in dcContext.data_clumps) {
-                        println("Starting refactor $key")
-                        refactorer.refactorDataClump(project, SuggestedNameWithDataClumpTypeContext("Test"+counter, value))
-                        println("### refactored $key")
-                        refactorer.commitAll(project)
-                        counter++
-
-                    }
-                    println("### starting refactor")
-                    println("### finnished refactor")
-
-                    println("### saving")
-                    println("### exiting")
-                    Thread.sleep(10*1000)
-                }
-
-
-
-
-
-
-
-
-
-
-
-                return@openProjectWithResolve true
-            }
+        var project:Project?=null
+        try{
+            val executor=PluginExecutor(myProjectPath,dcContextPath,usageContextPath)
+             project=opener.loadProject(myProjectPath.toPath(),executor)
         }
-        catch (ex:Throwable){
-            throw ex
+        catch (e:Exception){
+            println("### error")
+            println(e)
+            throw e
         }
-
-
-
-
-
 
 
 
