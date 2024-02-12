@@ -73,7 +73,7 @@ class DataClumpRefactorer : CliktCommand() {
 
 
     interface ProjectLoader{
-        fun loadProject(path: Path,executor:PluginExecutor):Project
+        fun loadProject(path: Path,executor:PluginExecutor):Unit
     }
     class PluginExecutor(val myProjectPath:File, val dcContextPath:File?, val usageContextPath:File?){
         fun executePlugin(project: Project){
@@ -99,28 +99,35 @@ class DataClumpRefactorer : CliktCommand() {
                 println("### saving")
                 println("### exiting")
                 Thread.sleep(10*1000)
+                exitProcess(0)
                     }
 
         }
     }
     class OpenProjectWithResolveLoader:ProjectLoader{
-        override fun loadProject(path: Path,executor: PluginExecutor): Project {
+        override fun loadProject(path: Path,executor: PluginExecutor): Unit {
             val opener=getKotlinJavaRepositoryOpener()
-            var resultingProject:Project?=null
             var result= opener.openProjectWithResolve(path) {
                 val project = it
                 executor.executePlugin(project)
-                resultingProject=project
                 return@openProjectWithResolve true
 
             }
-            return resultingProject!!
         }
     }
-    class OpenMavenOrGradleWithResolveLoader:ProjectLoader{
-        override fun loadProject(path: Path,executor: PluginExecutor): Project {
+    class OpenSingleProject:ProjectLoader{
+        /*
+        partially works with
+            gradle project created in IntelliJ
+            clean gradle project
+            maven projects in IntelliJ
+          completely works with
+            intelliJ projects
+            maven projects
+        * */
+
+        override fun loadProject(path: Path,executor: PluginExecutor): Unit {
             val opener=getKotlinJavaRepositoryOpener()
-            var resultingProject:Project?=null
             try{
                 var result= opener.openSingleProject(path) {
                     val project = it
@@ -134,15 +141,13 @@ class DataClumpRefactorer : CliktCommand() {
                 println(e)
                 throw e
             }
-            return resultingProject!!
         }
     }
     class OpenProjectLoader:ProjectLoader{
-        override fun loadProject(path: Path,executor: PluginExecutor): Project {
+        override fun loadProject(path: Path,executor: PluginExecutor): Unit {
             try {
                 val result=ProjectUtil.openProject(path.toString(),null,true)
                 executor.executePlugin(result!!)
-                return result!!
             }catch (e:Exception) {
                 println("### error")
                 println(e)
@@ -152,12 +157,11 @@ class DataClumpRefactorer : CliktCommand() {
         }
     }
     class LoadAndOpenProjectLoader:ProjectLoader{
-        override fun loadProject(path: Path,executor: PluginExecutor): Project {
+        override fun loadProject(path: Path,executor: PluginExecutor): Unit {
             try {
                 val projectManager = ProjectManager.getInstance()
                 val project = projectManager.loadAndOpenProject(path.toString())!!
                 executor.executePlugin(project)
-                return project
             }
             catch (e:Exception){
                 println("### error")
@@ -176,12 +180,12 @@ class DataClumpRefactorer : CliktCommand() {
        // projectManager.closeAndDisposeAllProjects(true)
         val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(myProjectPath)
         //var projectPath="/home/compf/data/uni/master/sem4/intelliJTest"
-        val opener=OpenMavenOrGradleWithResolveLoader()
+        val opener=OpenSingleProject()
         print("init")
         var project:Project?=null
         try{
             val executor=PluginExecutor(myProjectPath,dcContextPath,usageContextPath)
-             project=opener.loadProject(myProjectPath.toPath(),executor)
+             opener.loadProject(myProjectPath.toPath(),executor)
         }
         catch (e:Exception){
             println("### error")
