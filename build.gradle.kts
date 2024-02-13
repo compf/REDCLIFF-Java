@@ -1,6 +1,5 @@
 group = "org.jetbrains.research.refactoringDemoPlugin"
 version = "1.0"
-
 fun properties(key: String) = project.findProperty(key).toString()
 
 plugins {

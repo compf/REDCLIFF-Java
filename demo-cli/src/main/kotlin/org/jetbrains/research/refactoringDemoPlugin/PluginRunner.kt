@@ -66,9 +66,9 @@ class DataClumpFinderRunner :CliktCommand(){
 class DataClumpRefactorer : CliktCommand() {
     private val myProjectPath by
     argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
-    private val dcContextPath by option(help = "Path to data clump type context file").file(canBeFile = true, mustExist = true)
+    /*private val dcContextPath by option(help = "Path to data clump type context file").file(canBeFile = true, mustExist = true)
     private val usageContextPath by option(help = "Path to  usage type context file").file(canBeFile = true, mustExist = true)
-    private val runnerType by option(help = "Path to  name finding context file").default("manual")
+    private val runnerType by option(help = "Path to  name finding context file").default("manual")*/
     //https://github.com/JetBrains/intellij-community/blob/cb1f19a78bb9a4db29b33ff186cdb60ceab7f64c/java/java-impl-refactorings/src/com/intellij/refactoring/encapsulateFields/JavaEncapsulateFieldHelper.java#L86
 
 
@@ -115,7 +115,7 @@ class DataClumpRefactorer : CliktCommand() {
             }
         }
     }
-    class OpenSingleProject:ProjectLoader{
+    class OpenSingleProjectLoader:ProjectLoader{
         /*
         partially works with
             gradle project created in IntelliJ
@@ -143,6 +143,13 @@ class DataClumpRefactorer : CliktCommand() {
             }
         }
     }
+    /*
+    works with
+        intellij projects
+     works partially with
+         intelli maven project (only new files)
+         intelli gradle
+     */
     class OpenProjectLoader:ProjectLoader{
         override fun loadProject(path: Path,executor: PluginExecutor): Unit {
             try {
@@ -156,6 +163,41 @@ class DataClumpRefactorer : CliktCommand() {
 
         }
     }
+    class OpenOrImportProjectLoader:ProjectLoader{
+        /*
+        partially works with
+             raw gradle project
+             raw maven project
+             intelliJ maven project
+             intelij gradle project
+         fully works with
+             intelliJ projects
+
+
+         */
+        override fun loadProject(path: Path,executor: PluginExecutor): Unit {
+            try {
+                val project=ProjectUtil.openOrImport(path,null,false)
+                executor.executePlugin(project!!)
+
+            }catch (e:Exception) {
+                println("### error")
+                println(e)
+                throw e
+            }
+
+        }
+    }
+    /*
+    Works with
+        raw mavem project
+        intellij project
+    partially works with
+        raw gradle project
+        intelliJ gradle project
+        intelliJ maven project
+
+     */
     class LoadAndOpenProjectLoader:ProjectLoader{
         override fun loadProject(path: Path,executor: PluginExecutor): Unit {
             try {
@@ -176,16 +218,23 @@ class DataClumpRefactorer : CliktCommand() {
         println("### starting refactor")
 
         //VirtualFileManager.getInstance().syncRefresh()
-       // val projectManager = ProjectManagerEx.getInstanceEx()
+        val projectManager = ProjectManagerEx.getInstanceEx()
+        //projectManager.loadProject()
        // projectManager.closeAndDisposeAllProjects(true)
         val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(myProjectPath)
-        //var projectPath="/home/compf/data/uni/master/sem4/intelliJTest"
-        val opener=OpenSingleProject()
+
+
+        var projectPath=myProjectPath
+
+        val dcContextPath=Path.of("/home/compf/data/uni/master/sem4/data_clump_solver/REDCLIFF-Java/data/dataClumpDetectorContext.json").toFile()
+
+
+        val opener=LoadAndOpenProjectLoader()
         print("init")
         var project:Project?=null
         try{
-            val executor=PluginExecutor(myProjectPath,dcContextPath,usageContextPath)
-             opener.loadProject(myProjectPath.toPath(),executor)
+            val executor=PluginExecutor(projectPath,dcContextPath,null)
+             opener.loadProject(projectPath.toPath(),executor)
         }
         catch (e:Exception){
             println("### error")
