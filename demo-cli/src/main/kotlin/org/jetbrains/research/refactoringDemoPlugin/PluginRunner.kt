@@ -67,23 +67,49 @@ class DataClumpFinderRunner :CliktCommand(){
 
     }
 }
+enum class DataClumpContextInformation(val position:Int,contextFile:String){
+    DataclumpDetector(4,"dataClumpDetectorContext.json"),
+    NameFindig(6,"nameFinding.json"),
+    ReferenceFinding(8,"usageContext.json"),
 
+}
 class DataClumpRefactorer : CliktCommand() {
     private val myProjectPath by
     argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
-    /*private val dcContextPath by option(help = "Path to data clump type context file").file(canBeFile = true, mustExist = true)
+    private val nameFindingPath by option(help = "Path to data clump type extracted class names").file(canBeFile = true, mustExist = true)
+
+    private val dcContextPath by option(help = "Path to data clump type context file").file(canBeFile = true, mustExist = true)
     private val usageContextPath by option(help = "Path to  usage type context file").file(canBeFile = true, mustExist = true)
-    private val runnerType by option(help = "Path to  name finding context file").default("manual")*/
+    private val runnerType by option(help = "Path to  name finding context file").default("manual")
     //https://github.com/JetBrains/intellij-community/blob/cb1f19a78bb9a4db29b33ff186cdb60ceab7f64c/java/java-impl-refactorings/src/com/intellij/refactoring/encapsulateFields/JavaEncapsulateFieldHelper.java#L86
 
 
     interface ProjectLoader{
         fun loadProject(path: Path,executor:PluginExecutor):Unit
     }
-    class PluginExecutor(val myProjectPath:File, val dcContextPath:File?, val usageContextPath:File?){
+    class PluginExecutor(val myProjectPath:File, val dcContextPath:File?, val usageContextPath:File?,nameFindingPath:File?){
+        private var usageInfos:Map<String,Iterable<UsageInfo>>?=null
+        private var classNames:Map<String,String>?=null
+        init {
+            if(usageContextPath!=null){
+                this.usageInfos= Gson().fromJson<Map<String,Iterable<UsageInfo>>>(
+                    java.nio.file.Files.readString(usageContextPath.toPath()),
+                    Map::class.java
+                )
+            }
+            if(nameFindingPath!=null){
+                this.classNames= Gson().fromJson<Map<String,String>>(
+                    java.nio.file.Files.readString(nameFindingPath.toPath()),
+                    Map::class.java
+                )
+            }
+        }
+        fun getRefactorer(project:Project,dcKey:String):dataClumpRefactoring.DataClumpRefactorer{
+            val refFinder=UsageInfoBasedFinder(project,this.usageInfos!![dcKey]!!)
+            return dataClumpRefactoring.ManualDataClumpRefactorer(myProjectPath,refFinder)
+        }
         fun executePlugin(project: Project){
             ApplicationManager.getApplication().invokeAndWait() {
-                val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(myProjectPath)
                 val dcContext = Gson().fromJson<DataClumpsTypeContext>(
                     java.nio.file.Files.readString(dcContextPath!!.toPath()),
                     DataClumpsTypeContext::class.java
@@ -91,6 +117,8 @@ class DataClumpRefactorer : CliktCommand() {
 
                 var counter=0
                 for ((key, value) in dcContext.data_clumps) {
+                    val refactorer= getRefactorer(project,key)
+
                     println("Starting refactor $key")
                     refactorer.refactorDataClump(project, SuggestedNameWithDataClumpTypeContext("Test"+counter, value))
                     println("### refactored $key")
@@ -226,7 +254,6 @@ class DataClumpRefactorer : CliktCommand() {
         val projectManager = ProjectManagerEx.getInstanceEx()
         //projectManager.loadProject()
        // projectManager.closeAndDisposeAllProjects(true)
-        val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(myProjectPath)
 
 
         var projectPath=Path.of("/home/compf/Documents/intelliJTest/").toFile()
@@ -238,7 +265,7 @@ class DataClumpRefactorer : CliktCommand() {
         print("init")
         var project:Project?=null
         try{
-            val executor=PluginExecutor(projectPath,dcContextPath,null)
+            val executor=PluginExecutor(projectPath,dcContextPath, null,null)
              opener.loadProject(projectPath.toPath(),executor)
         }
         catch (e:Exception){

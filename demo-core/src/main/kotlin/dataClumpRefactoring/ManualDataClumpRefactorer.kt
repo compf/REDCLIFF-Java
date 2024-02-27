@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.util.collectionUtils.concat
 import java.io.BufferedReader
 import java.nio.file.Path
 
-class ManualDataClumpRefactorer(private val projectPath: File) : DataClumpRefactorer(projectPath) {
+class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: ReferenceFinder) : DataClumpRefactorer(projectPath) {
 
 
     fun updateMethodSignature(
@@ -177,9 +177,7 @@ class ManualDataClumpRefactorer(private val projectPath: File) : DataClumpRefact
 
     }
 
-    fun calcUniqueKey(usageInfo: UsageInfo): String {
-        return usageInfo.extractedClassPath + usageInfo.filePath + usageInfo.name!!
-    }
+
 
     fun updateFieldDeclarations(
         project: Project,
@@ -398,7 +396,6 @@ class ManualDataClumpRefactorer(private val projectPath: File) : DataClumpRefact
         ep: DataClumpEndpoint,
         relevantParameters: Set<String>
     ): Boolean {
-        val refFinder=FullReferenceFinder()
 
         val man = VirtualFileManager.getInstance()
         val vFile = man.findFileByUrl(ep.filePath)!!
