@@ -49,8 +49,8 @@ fun Project.extractPsiFiles(filePredicate: (VirtualFile) -> Boolean): MutableSet
     if(root.isEmpty()){
         root= arrayOf(this.projectFile)
     }
-    root.mapNotNull { root ->
-        VfsUtilCore.iterateChildrenRecursively(root, null) { virtualFile ->
+    root.mapNotNull { myRoot ->
+        VfsUtilCore.iterateChildrenRecursively(myRoot, null) { virtualFile ->
             if (!filePredicate(virtualFile) || virtualFile.canonicalPath == null) {
                 return@iterateChildrenRecursively true
             }

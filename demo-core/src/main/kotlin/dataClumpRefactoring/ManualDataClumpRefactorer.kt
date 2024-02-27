@@ -360,21 +360,21 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         return references.sortedBy { -calcDepth(it.element) }.map { it.element }
     }
     val classCreator=ManualJavaClassCreator()
-    fun handleOverridingMethods(baseMethod:PsiMethod,relevantParameters: Set<String>,extractedClass: PsiClass,nameService: IdentifierNameService){
-        val overrides=OverridingMethodsSearch.search(baseMethod).findAll()
+    fun handleOverridingMethods(baseMethod:PsiMethod,relevantParameters: Set<String>,extractedClass: PsiClass,nameService: IdentifierNameService,refFinder:ReferenceFinder){
+        val overrides=refFinder.findMethodOverrides(baseMethod)
         val project=baseMethod.project
        for(overridingMethod in overrides){
 
-            for (param in overridingMethod.parameters) {
+            for (param in overridingMethod.parameterList.parameters) {
                 if(param.name !in relevantParameters) continue
-                val references = sortReferencesByDepth(ReferencesSearch.search(param.sourceElement!!).findAll())
+                val references = sortReferencesByDepth(refFinder.findParameterUsage(param))
                 for (element in references) {
 
                     updateVariableUsage(overridingMethod.project, extractedClass, element, nameService, true)
                 }
 
             }
-            val overridingMethodUsages=ReferencesSearch.search(overridingMethod).findAll()
+            val overridingMethodUsages=refFinder.findMethodUsage(overridingMethod)
             updateMethodSignature(project, overridingMethod, extractedClass, relevantParameters.toTypedArray(), nameService)
 
             for (ref in overridingMethodUsages) {
@@ -398,8 +398,11 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         ep: DataClumpEndpoint,
         relevantParameters: Set<String>
     ): Boolean {
+        val refFinder=FullReferenceFinder()
+
         val man = VirtualFileManager.getInstance()
         val vFile = man.findFileByUrl(ep.filePath)!!
+        vFile.refresh(false, true)
         val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
         val nameService = PrimitiveNameService(StubNameValidityChecker())
 
@@ -419,8 +422,8 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                 classCreator.getOrCreateClass(project, suggestedClassName, dataClumpFile,ep.nameTypesPair, nameService)
             val method = data._1
 
-            val methodUsages = ReferencesSearch.search(method).findAll()
-            handleOverridingMethods(method,relevantParameters,extractedClass,nameService)
+            val methodUsages = refFinder.findMethodUsage(method)
+            handleOverridingMethods(method,relevantParameters,extractedClass,nameService,refFinder)
             for (param in method.parameterList.parameters) {
                 if(param.name !in relevantParameters) continue
                 val references = sortReferencesByDepth( ReferencesSearch.search(param).findAll())
@@ -454,7 +457,8 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                 classCreator.getOrCreateClass(project, suggestedClassName, dataClumpFile, ep.nameTypesPair, nameService)
             for (field in data) {
                 if(field.name !in relevantParameters) continue
-                val fieldUsages=ReferencesSearch.search(field).findAll()
+                val fieldUsages=refFinder.findFieldUsage(field)
+
                 for (ref in fieldUsages) {
                     val element = ref.element
                     updateVariableUsage(project, extractedClass, element, nameService, false)

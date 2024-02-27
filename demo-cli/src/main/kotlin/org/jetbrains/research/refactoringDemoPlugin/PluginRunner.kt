@@ -31,7 +31,12 @@ import com.intellij.openapi.project.ex.ProjectManagerEx
 import dataClumpRefactoring.*
 import com.google.gson.reflect.TypeToken
 import com.intellij.ide.impl.ProjectUtil
+import com.intellij.ide.impl.getTrustedState
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.components.stateStore
+import org.jetbrains.kotlin.idea.codeInsight.shorten.ensureNoRefactoringRequestsBeforeRefactoring
+import org.jetbrains.research.refactoringDemoPlugin.util.getAllRelevantVariables
+import org.jetbrains.uast.evaluation.toConstant
 import java.nio.file.Path
 
 object PluginRunner : ApplicationStarter {
@@ -224,7 +229,7 @@ class DataClumpRefactorer : CliktCommand() {
         val refactorer= dataClumpRefactoring.ManualDataClumpRefactorer(myProjectPath)
 
 
-        var projectPath=myProjectPath
+        var projectPath=Path.of("/home/compf/Documents/intelliJTest/").toFile()
 
         val dcContextPath=Path.of("/home/compf/data/uni/master/sem4/data_clump_solver/REDCLIFF-Java/data/dataClumpDetectorContext.json").toFile()
 
@@ -238,7 +243,7 @@ class DataClumpRefactorer : CliktCommand() {
         }
         catch (e:Exception){
             println("### error")
-            println(e)
+          e.printStackTrace()
             throw e
         }
 
