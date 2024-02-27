@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.util.collectionUtils.concat
 import java.io.BufferedReader
 import java.nio.file.Path
 
-class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(projectPath) {
+class ManualDataClumpRefactorer(private val projectPath: File) : DataClumpRefactorer(projectPath) {
 
 
     fun updateMethodSignature(
@@ -356,8 +356,8 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
         }
         return depth
     }
-    fun sortReferencesByDepth(references:Iterable<PsiReference>):List<PsiElement>{
-        return references.sortedBy { -calcDepth(it.element) }.map { it.element }
+    fun sortReferencesByDepth(references:Iterable<PsiElement>):List<PsiElement>{
+        return references.sortedBy { -calcDepth(it) }
     }
     val classCreator=ManualJavaClassCreator()
     fun handleOverridingMethods(baseMethod:PsiMethod,relevantParameters: Set<String>,extractedClass: PsiClass,nameService: IdentifierNameService,refFinder:ReferenceFinder){
@@ -367,18 +367,18 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
 
             for (param in overridingMethod.parameterList.parameters) {
                 if(param.name !in relevantParameters) continue
-                val references = sortReferencesByDepth(refFinder.findParameterUsage(param))
+                val references = sortReferencesByDepth(refFinder.findParameterUsages(param))
                 for (element in references) {
 
                     updateVariableUsage(overridingMethod.project, extractedClass, element, nameService, true)
                 }
 
             }
-            val overridingMethodUsages=refFinder.findMethodUsage(overridingMethod)
+            val overridingMethodUsages=refFinder.findMethodUsages(overridingMethod)
             updateMethodSignature(project, overridingMethod, extractedClass, relevantParameters.toTypedArray(), nameService)
 
             for (ref in overridingMethodUsages) {
-                val element = ref.element
+                val element = ref
                 updateMethodUsage(
                     project,
                     extractedClass,
@@ -422,11 +422,11 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                 classCreator.getOrCreateClass(project, suggestedClassName, dataClumpFile,ep.nameTypesPair, nameService)
             val method = data._1
 
-            val methodUsages = refFinder.findMethodUsage(method)
+            val methodUsages = refFinder.findMethodUsages(method)
             handleOverridingMethods(method,relevantParameters,extractedClass,nameService,refFinder)
             for (param in method.parameterList.parameters) {
                 if(param.name !in relevantParameters) continue
-                val references = sortReferencesByDepth( ReferencesSearch.search(param).findAll())
+                val references = sortReferencesByDepth( ReferencesSearch.search(param).findAll().map { it.element })
                 for (element in references) {
                     updateVariableUsage(project, extractedClass, element, nameService, true)
                 }
@@ -435,7 +435,7 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
             updateMethodSignature(project, method, extractedClass, relevantParameters.toTypedArray(), nameService)
 
             for (ref in methodUsages) {
-                val element = ref.element
+                val element = ref
                 updateMethodUsage(
                     project,
                     extractedClass,
@@ -457,10 +457,10 @@ class ManualDataClumpRefactorer(val projectPath: File) : DataClumpRefactorer(pro
                 classCreator.getOrCreateClass(project, suggestedClassName, dataClumpFile, ep.nameTypesPair, nameService)
             for (field in data) {
                 if(field.name !in relevantParameters) continue
-                val fieldUsages=refFinder.findFieldUsage(field)
+                val fieldUsages=refFinder.findFieldUsages(field)
 
                 for (ref in fieldUsages) {
-                    val element = ref.element
+                    val element = ref
                     updateVariableUsage(project, extractedClass, element, nameService, false)
                 }
                 updateFieldDeclarations(project, field, extractedClass, relevantParameters.toTypedArray(),nameService,field.name!!)

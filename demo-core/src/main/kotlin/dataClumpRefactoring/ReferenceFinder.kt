@@ -1,11 +1,6 @@
 package dataClumpRefactoring
 
-import com.intellij.psi.PsiClass
-import com.intellij.psi.PsiField
-import com.intellij.psi.PsiMethod
-import com.intellij.psi.PsiParameter
-import com.intellij.psi.PsiReference
-import com.intellij.psi.PsiReferenceExpression
+import com.intellij.psi.*
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.PsiUtil
 import org.jetbrains.kotlin.idea.search.usagesSearch.searchReferencesOrMethodReferences
@@ -15,10 +10,10 @@ import org.jetbrains.research.refactoringDemoPlugin.util.extractKotlinAndJavaCla
 
 interface ReferenceFinder {
 
-    fun findFieldUsage(field: PsiField): List<PsiReference>
-    fun findParameterUsage(parameter:PsiParameter):List<PsiReference>
+    fun findFieldUsages(field: PsiField): List<PsiElement>
+    fun findParameterUsages(parameter:PsiParameter):List<PsiElement>
 
-   fun  findMethodUsage(method:PsiMethod):List<PsiReference>
+   fun  findMethodUsages(method:PsiMethod):List<PsiElement>
   fun  findMethodOverrides(method:PsiMethod):List<PsiMethod>
 
 
@@ -28,36 +23,36 @@ interface ReferenceFinder {
 
 }
 class FullReferenceFinder : ReferenceFinder {
-    override fun findFieldUsage(field: PsiField): List<PsiReference> {
-        var relevantClasses= emptyList<PsiClass>()
-       if(field.modifierList!!.hasModifierProperty("public")){
+    override fun findFieldUsages(field: PsiField): List<PsiElement> {
+        var relevantClasses: List<PsiClass>
+        if(field.modifierList!!.hasModifierProperty("public")){
            relevantClasses=field.project.extractKotlinAndJavaClasses()
        }
         else{
               relevantClasses=listOf(field.containingClass!!)
 
        }
-        val result= mutableListOf<PsiReference>()
+        val result= mutableListOf<PsiElement>()
         for(cls in relevantClasses){
-           result.addAll(PsiTreeUtil.findChildrenOfType(cls,PsiReferenceExpression::class.java).filter { it.isReferenceTo(field) })
+           result.addAll(PsiTreeUtil.findChildrenOfType(cls,PsiReferenceExpression::class.java).filter { it.isReferenceTo(field) }.map { it.element})
         }
         return result
     }
 
-    override fun findParameterUsage(parameter: PsiParameter): List<PsiReference> {
-        val result= mutableListOf<PsiReference>()
+    override fun findParameterUsages(parameter: PsiParameter): List<PsiElement> {
+        val result= mutableListOf<PsiElement>()
         val method=parameter.getParentOfType<PsiMethod>(true)!!
 
-        result.addAll(PsiTreeUtil.findChildrenOfType(method,PsiReferenceExpression::class.java).filter { it.isReferenceTo(parameter) })
+        result.addAll(PsiTreeUtil.findChildrenOfType(method,PsiReferenceExpression::class.java).filter { it.isReferenceTo(parameter) }.map { it.element })
 
         return result
     }
 
-    override fun findMethodUsage(method: PsiMethod): List<PsiReference> {
-        val result= mutableListOf<PsiReference>()
+    override fun findMethodUsages(method: PsiMethod): List<PsiElement> {
+        val result= mutableListOf<PsiElement>()
         val relevantClasses=method.project.extractKotlinAndJavaClasses()
         for(cls in relevantClasses){
-            result.addAll(PsiTreeUtil.findChildrenOfType(cls,PsiReferenceExpression::class.java).filter { it.isReferenceTo(method) })
+            result.addAll(PsiTreeUtil.findChildrenOfType(cls,PsiReferenceExpression::class.java).filter { it.isReferenceTo(method) }.map { it.element })
         }
         return result
     }
