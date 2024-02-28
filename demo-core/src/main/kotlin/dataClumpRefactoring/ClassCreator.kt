@@ -10,8 +10,13 @@ import com.intellij.psi.*
 import java.io.File
 import java.nio.file.Path
 
-abstract class ClassCreator {
+abstract class ClassCreator(paramNameClassMap:Map<String,String>?) {
     val nameClassPathMap= mutableMapOf<String,String>()
+    init {
+        if(paramNameClassMap!=null){
+            nameClassPathMap.putAll(paramNameClassMap)
+        }
+    }
     fun getOrCreateClass(project: Project,
                          className: String,
                          dataClumpFile: PsiFile,
@@ -42,7 +47,7 @@ abstract class ClassCreator {
                              relevantVariables: List<Pair<String,String>>,
                              nameService: IdentifierNameService)
 }
-class PsiClassCreator: ClassCreator(){
+class PsiClassCreator(paramNameClassMap :Map<String,String>? ): ClassCreator(paramNameClassMap){
     override fun createClass(project: Project,
                              className: String,
                              dataClumpFile: PsiFile,
@@ -118,7 +123,7 @@ class PsiClassCreator: ClassCreator(){
 
 
 
-class ManualJavaClassCreator : ClassCreator() {
+class ManualJavaClassCreator(paramNameClassMap :Map<String,String>? ) : ClassCreator(paramNameClassMap) {
 
     fun replaceFileName(originalPath: String, newFileName: String): String {
         val originalFile = File(originalPath)

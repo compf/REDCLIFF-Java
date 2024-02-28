@@ -8,6 +8,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.arguments.validate
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.types.file
+import com.github.ajalt.clikt.parameters.types.int
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.intellij.openapi.application.ApplicationManager
@@ -34,6 +35,7 @@ import com.intellij.ide.impl.ProjectUtil
 import com.intellij.ide.impl.getTrustedState
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.stateStore
+import javaslang.collection.TreeMap
 import org.jetbrains.kotlin.idea.codeInsight.shorten.ensureNoRefactoringRequestsBeforeRefactoring
 import org.jetbrains.research.refactoringDemoPlugin.util.getAllRelevantVariables
 import org.jetbrains.uast.evaluation.toConstant
@@ -67,60 +69,78 @@ class DataClumpFinderRunner :CliktCommand(){
 
     }
 }
-enum class DataClumpContextInformation(val position:Int,contextFile:String){
-    DataclumpDetector(4,"dataClumpDetectorContext.json"),
-    NameFindig(6,"nameFinding.json"),
-    ReferenceFinding(8,"usageContext.json"),
+inline fun <reified T> genericType() = object: TypeToken<T>() {}.type
+enum class DataClumpContextInformation(val position:Int,val initializer: (dataPath:Path,DataClumpContextData)->Unit){
+    DataclumpDetector(4,{dataPath,contextData->
+        val path= dataPath.resolve("dataClumpDetectorContext.json")
+        val json= java.nio.file.Files.readString(path)
+        val context= Gson().fromJson<DataClumpsTypeContext>(json,DataClumpsTypeContext::class.java)
+        contextData.dataClumps=context
+    }),
+    NameFinding(6,{dataPath,contextData->
+        val path= dataPath.resolve("nameFindingContext.json")
+        val json= java.nio.file.Files.readString(path)
+        val context= Gson().fromJson<Map<String,String>>(json,Map::class.java)
+        contextData.classNames=context
+    }),
+    ClassExtracting(7,{dataPath,contextData->
+        val path= dataPath.resolve("classExtractionContext.json")
+        val json= java.nio.file.Files.readString(path)
+        val context= Gson().fromJson<Map<String,String>>(json,Map::class.java)
+        contextData.extractedClassPaths=context
+    }),
+    ReferenceFinding(8, {dataPath,contextData->
+        val path= dataPath.resolve("usageFindingContext.json")
+        val json= java.nio.file.Files.readString(path)
+        val typeToken =genericType<Map<String, ArrayList<UsageInfo>>>()
 
+        val context= Gson().fromJson<Map<String, ArrayList<UsageInfo>>>(json,typeToken)
+        contextData.usageInfos=context
+    })
+
+}
+class DataClumpContextData{
+    var dataClumps:DataClumpsTypeContext?=null
+    var usageInfos:Map<String,Iterable<UsageInfo>>?=null
+    var usageFinder:ReferenceFinder?=null
+    var classNames:Map<String,String>?=null
+    var extractedClassPaths:Map<String,String>?=null
 }
 class DataClumpRefactorer : CliktCommand() {
     private val myProjectPath by
     argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
-    private val nameFindingPath by option(help = "Path to data clump type extracted class names").file(canBeFile = true, mustExist = true)
 
-    private val dcContextPath by option(help = "Path to data clump type context file").file(canBeFile = true, mustExist = true)
-    private val usageContextPath by option(help = "Path to  usage type context file").file(canBeFile = true, mustExist = true)
-    private val runnerType by option(help = "Path to  name finding context file").default("manual")
     //https://github.com/JetBrains/intellij-community/blob/cb1f19a78bb9a4db29b33ff186cdb60ceab7f64c/java/java-impl-refactorings/src/com/intellij/refactoring/encapsulateFields/JavaEncapsulateFieldHelper.java#L86
-
+    private val dataPath by
+    argument(help = "Path to the context data").file(mustExist = true, canBeFile = false).optional()
+    private val availableContexts by argument(help = "Integer that identifies which contexts are available").optional()
 
     interface ProjectLoader{
         fun loadProject(path: Path,executor:PluginExecutor):Unit
     }
-    class PluginExecutor(val myProjectPath:File, val dcContextPath:File?, val usageContextPath:File?,nameFindingPath:File?){
-        private var usageInfos:Map<String,Iterable<UsageInfo>>?=null
-        private var classNames:Map<String,String>?=null
+    class PluginExecutor(val myProjectPath:File,val dataPath:Path,val availableContexts:Int){
+        val dataClumpContextData=DataClumpContextData()
         init {
-            if(usageContextPath!=null){
-                this.usageInfos= Gson().fromJson<Map<String,Iterable<UsageInfo>>>(
-                    java.nio.file.Files.readString(usageContextPath.toPath()),
-                    Map::class.java
-                )
+            for(context in DataClumpContextInformation.values()){
+                val mask=1 shl context.position
+                if(availableContexts and mask!=0){
+                    context.initializer(dataPath,dataClumpContextData)
+                }
             }
-            if(nameFindingPath!=null){
-                this.classNames= Gson().fromJson<Map<String,String>>(
-                    java.nio.file.Files.readString(nameFindingPath.toPath()),
-                    Map::class.java
-                )
-            }
+
         }
-        fun getRefactorer(project:Project,dcKey:String):dataClumpRefactoring.DataClumpRefactorer{
-            val refFinder=UsageInfoBasedFinder(project,this.usageInfos!![dcKey]!!)
-            return dataClumpRefactoring.ManualDataClumpRefactorer(myProjectPath,refFinder)
-        }
+
+
         fun executePlugin(project: Project){
             ApplicationManager.getApplication().invokeAndWait() {
-                val dcContext = Gson().fromJson<DataClumpsTypeContext>(
-                    java.nio.file.Files.readString(dcContextPath!!.toPath()),
-                    DataClumpsTypeContext::class.java
-                )
 
+                this.dataClumpContextData.usageFinder=UsageInfoBasedFinder(project,dataClumpContextData.usageInfos!!)
+               val refactorer= ManualDataClumpRefactorer(myProjectPath,dataClumpContextData.usageFinder!!,ManualJavaClassCreator(dataClumpContextData.extractedClassPaths))
                 var counter=0
-                for ((key, value) in dcContext.data_clumps) {
-                    val refactorer= getRefactorer(project,key)
-
+                for ((key, value) in dataClumpContextData.dataClumps!!.data_clumps) {
+                    this.dataClumpContextData.usageFinder!!.updateDataClumpKey(key)
                     println("Starting refactor $key")
-                    refactorer.refactorDataClump(project, SuggestedNameWithDataClumpTypeContext("Test"+counter, value))
+                    refactorer.refactorDataClump(project, SuggestedNameWithDataClumpTypeContext(dataClumpContextData.classNames!![key]!!, value))
                     println("### refactored $key")
                     refactorer.commitAll(project)
                     counter++
@@ -246,6 +266,23 @@ class DataClumpRefactorer : CliktCommand() {
 
         }
     }
+    fun decodeToInt(value:String):Int{
+        var base=10
+        val trimmed=value
+        if(value.startsWith("0x")){
+            base=16
+            trimmed.substring(2)
+        }
+        else if(value.startsWith("0b")){
+            base=2
+            trimmed.substring(2)
+        }
+        else if(value.startsWith("0")){
+            base=8
+            trimmed.substring(1)
+        }
+        return Integer.parseInt(trimmed,base)
+    }
 
     override fun run() {
         println("### starting refactor")
@@ -256,17 +293,14 @@ class DataClumpRefactorer : CliktCommand() {
        // projectManager.closeAndDisposeAllProjects(true)
 
 
-        var projectPath=Path.of("/home/compf/Documents/intelliJTest/").toFile()
-
-        val dcContextPath=Path.of("/home/compf/data/uni/master/sem4/data_clump_solver/REDCLIFF-Java/data/dataClumpDetectorContext.json").toFile()
-
 
         val opener=LoadAndOpenProjectLoader()
         print("init")
         var project:Project?=null
         try{
-            val executor=PluginExecutor(projectPath,dcContextPath, null,null)
-             opener.loadProject(projectPath.toPath(),executor)
+            val availableContext=availableContexts?.let { decodeToInt(it) } ?: Int.MAX_VALUE
+            val executor=PluginExecutor(myProjectPath, dataPath!!.toPath(),availableContext)
+             opener.loadProject(myProjectPath.toPath(),executor)
         }
         catch (e:Exception){
             println("### error")

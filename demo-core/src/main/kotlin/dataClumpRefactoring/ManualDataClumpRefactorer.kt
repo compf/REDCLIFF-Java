@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.util.collectionUtils.concat
 import java.io.BufferedReader
 import java.nio.file.Path
 
-class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: ReferenceFinder) : DataClumpRefactorer(projectPath) {
+class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: ReferenceFinder,val classCreator:ClassCreator) : DataClumpRefactorer(projectPath) {
 
 
     fun updateMethodSignature(
@@ -122,10 +122,12 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
     fun updateVariableUsage(
         project: Project,
         extractedClass: PsiClass,
-        identifier: PsiElement,
+        element: PsiElement,
         nameService: IdentifierNameService,
         isParameter: Boolean
     ) {
+        val identifier=if(element is PsiIdentifier) element.parent else element
+
         val getterName = nameService.getGetterName(identifier.text!!)
         val method = identifier.getParentOfType<PsiMethod>(true)
         if (method == null) {
@@ -287,7 +289,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
 
         var newExpr = JavaPsiFacade.getElementFactory(project)
             .createExpressionFromText("new ${extractedClass.qualifiedName}(${argsInOrder.joinToString(",")})", exprList)
-        if (method.parameterList.parameters[insertionPos].type.canonicalText == extractedClass.qualifiedName) {
+        /*if (containingMethod.parameterList.parameters[insertionPos].type.canonicalText == extractedClass.qualifiedName) {
             val paramName = nameService.getParameterName(extractedClass.name!!, containingMethod)
             val name =
                 if (containingMethod.parameterList.parameters.any { it.name == paramName }) paramName else nameService.getFieldName(
@@ -295,7 +297,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                     containingMethod.getParentOfType<PsiClass>(true)
                 )
             newExpr = JavaPsiFacade.getElementFactory(project).createExpressionFromText(name, containingMethod)
-        }
+        }*/
         WriteCommandAction.runWriteCommandAction(project) {
 
             var counter = 0
@@ -329,7 +331,6 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
     fun nop() {
 
     }
-    val nameClassPathMap = mutableMapOf<String, String>()
 
 
     fun findClassRec(classes:Array<PsiClass>,className:String):PsiClass?{
@@ -357,7 +358,6 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
     fun sortReferencesByDepth(references:Iterable<PsiElement>):List<PsiElement>{
         return references.sortedBy { -calcDepth(it) }
     }
-    val classCreator=ManualJavaClassCreator()
     fun handleOverridingMethods(baseMethod:PsiMethod,relevantParameters: Set<String>,extractedClass: PsiClass,nameService: IdentifierNameService,refFinder:ReferenceFinder){
         val overrides=refFinder.findMethodOverrides(baseMethod)
         val project=baseMethod.project
@@ -423,7 +423,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
             handleOverridingMethods(method,relevantParameters,extractedClass,nameService,refFinder)
             for (param in method.parameterList.parameters) {
                 if(param.name !in relevantParameters) continue
-                val references = sortReferencesByDepth( ReferencesSearch.search(param).findAll().map { it.element })
+                val references = sortReferencesByDepth( refFinder.findParameterUsages(param))
                 for (element in references) {
                     updateVariableUsage(project, extractedClass, element, nameService, true)
                 }

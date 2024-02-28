@@ -17,6 +17,14 @@ abstract class IOCliTask : org.jetbrains.intellij.tasks.RunIdeTask() {
     val myProjectPath: String? by project
 
 
+
+
+    @get:Input
+    val dataPath: String? by project
+
+    @get:Input
+    @get:Optional
+    val availableContexts: String? by project
    /* @get:Optional
     @get:Input
     val dcContextPath: String? by project
@@ -51,13 +59,17 @@ tasks {
         dependsOn("buildPlugin")
         args = listOf(
             runner,
-            myProjectPath//,
+            myProjectPath,
+            dataPath,
+            availableContexts,
+
+
            /* "--dc-context-path=$dcContextPath",
             "--usage-context-path=$usageContextPath",
-            "--runner-type=$runnerType"*/,
+            "--runner-type=$runnerType"*/
 
 
-            ).filter { !it!!.endsWith("=null") }
+            ).filter { it!=null &&  !it!!.endsWith("=null") }
+        println(args)
     }
 }
-

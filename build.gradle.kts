@@ -5,8 +5,8 @@ fun properties(key: String) = project.findProperty(key).toString()
 plugins {
     java
     kotlin("jvm") version "1.8.10" apply true
-    id("org.jetbrains.intellij") version "1.13.2" apply true
-    id("org.jlleitschuh.gradle.ktlint") version "10.0.0" apply true
+    id("org.jetbrains.intellij") version "1.17.2" apply true
+  //  id("org.jlleitschuh.gradle.ktlint") version "10.0.0" apply true
 }
 /*dependencies {
     implementation("$utilitiesProjectName:plugin-utilities-core") {
@@ -19,7 +19,7 @@ allprojects {
         plugin("java")
         plugin("kotlin")
         plugin("org.jetbrains.intellij")
-        plugin("org.jlleitschuh.gradle.ktlint")
+        //plugin("org.jlleitschuh.gradle.ktlint")
     }
 
     repositories {
@@ -27,7 +27,6 @@ allprojects {
         mavenCentral()
         maven("https://packages.jetbrains.team/maven/p/ki/maven")
     }
-
 
     intellij {
         version.set(properties("platformVersion"))
@@ -37,13 +36,13 @@ allprojects {
         plugins.set(properties("platformPlugins").split(',').map(String::trim).filter(String::isNotEmpty))
     }
 
-    ktlint {
+    /*ktlint {
         enableExperimentalRules.set(true)
         disabledRules.set(setOf("no-wildcard-imports", "import-ordering"))
         filter {
             exclude("**/resources/**")
         }
-    }
+    }*/
 
     val jvmVersion = "17"
 

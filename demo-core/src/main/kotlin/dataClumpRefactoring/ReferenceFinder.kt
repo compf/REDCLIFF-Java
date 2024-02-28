@@ -19,7 +19,9 @@ interface ReferenceFinder {
    fun  findMethodUsages(method:PsiMethod):List<PsiElement>
   fun  findMethodOverrides(method:PsiMethod):List<PsiMethod>
 
+  fun updateDataClumpKey(dcKey:String){
 
+  }
 
 
 
@@ -71,38 +73,61 @@ class FullReferenceFinder : ReferenceFinder {
 }
 
 
-class UsageInfoBasedFinder (val project:Project,val usages:Iterable<UsageInfo>): ReferenceFinder {
+class UsageInfoBasedFinder (val project:Project,val usagesMap:Map<String,Iterable<UsageInfo>>): ReferenceFinder {
+    private var usageMapElementa=mutableMapOf<String,Iterable<PsiElement>>()
+    private var  usageElements:Iterable<PsiElement> =emptyList<PsiElement>()
+    private var usages:Iterable<UsageInfo> =emptyList<UsageInfo>()
+    init {
+
+        for((key,value) in usagesMap){
+            usageMapElementa[key]=value.map { getElementByPosition(it.filePath,it.range) }
+        }
+    }
     fun getElementByPosition(path:String, pos:Position):PsiElement{
+        val fullPath="file://" + java.nio.file.Paths.get(project.basePath!!, path).toString()
+        println(fullPath)
         val man = VirtualFileManager.getInstance()
-        val vFile = man.findFileByUrl(path)!!
+        val vFile = man.findFileByUrl(fullPath)!!
+
         var file=PsiManager.getInstance(project).findFile(vFile)!!
         val document=PsiDocumentManager.getInstance(project).getDocument(file)!!
         val startOffset=document.getLineStartOffset(pos.startLine)+pos.startColumn
         val endOffset=document.getLineStartOffset(pos.endLine)+pos.endColumn
         return file.findElementAt(startOffset)!!.getParentOfType<PsiElement>(false)!!
     }
+
+    override fun updateDataClumpKey(dcKey: String) {
+       usageElements=usageMapElementa[dcKey]!!
+        usages=usagesMap[dcKey]!!
+    }
     override fun findMethodOverrides(method: PsiMethod): List<PsiMethod> {
         val methodPos=method.startOffset
         val result= mutableListOf<PsiMethod>()
-       for(usage in usages){
+        var index=0
+       for(pair in usages.zip(usageElements)){
+           val usage=pair.first
+              val element=pair.second
            if(usage.symbolType==UsageInfo.UsageType.MethodDeclared.ordinal){
                if(usage.name==method.name){
-                  val element=getElementByPosition(usage.filePath,usage.range)
+
                    if(element is PsiMethod){
                        result.add(element)
                    }
                }
+
            }
+           index++
        }
         return emptyList()
     }
 
     override fun findFieldUsages(field: PsiField): List<PsiElement> {
         val result= mutableListOf<PsiElement>()
-        for(usage in usages){
+        for(pair in usages.zip(usageElements)){
+            val usage=pair.first
+            val element=pair.second
             if(usage.symbolType==UsageInfo.UsageType.VariableUsed.ordinal){
                 if(usage.name==field.name){
-                    val element=getElementByPosition(usage.filePath,usage.range)
                     result.add(element)
                 }
             }
@@ -112,10 +137,11 @@ class UsageInfoBasedFinder (val project:Project,val usages:Iterable<UsageInfo>):
 
     override fun findMethodUsages(method: PsiMethod): List<PsiElement> {
         val result= mutableListOf<PsiElement>()
-        for(usage in usages){
+        for(pair in usages.zip(usageElements)){
+            val usage=pair.first
+            val element=pair.second
             if(usage.symbolType==UsageInfo.UsageType.MethodUsed.ordinal){
                 if(usage.name==method.name){
-                    val element=getElementByPosition(usage.filePath,usage.range)
                     result.add(element)
                 }
             }
@@ -125,10 +151,11 @@ class UsageInfoBasedFinder (val project:Project,val usages:Iterable<UsageInfo>):
 
     override fun findParameterUsages(parameter: PsiParameter): List<PsiElement> {
         val result= mutableListOf<PsiElement>()
-        for(usage in usages){
+        for(pair in usages.zip(usageElements)){
+            val usage=pair.first
+            val element=pair.second
             if(usage.symbolType==UsageInfo.UsageType.VariableUsed.ordinal){
                 if(usage.name==parameter.name){
-                    val element=getElementByPosition(usage.filePath,usage.range)
                     result.add(element)
                 }
             }
