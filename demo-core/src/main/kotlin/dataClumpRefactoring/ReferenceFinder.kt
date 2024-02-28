@@ -113,12 +113,15 @@ class UsageInfoBasedFinder (val project:Project,val usagesMap:Map<String,Iterabl
                    if(element is PsiMethod){
                        result.add(element)
                    }
+                   else{
+                       result.add(element.parent as PsiMethod)
+                   }
                }
 
            }
            index++
        }
-        return emptyList()
+        return result
     }
 
     override fun findFieldUsages(field: PsiField): List<PsiElement> {
