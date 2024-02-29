@@ -81,7 +81,7 @@ class PsiClassCreator(paramNameClassMap :Map<String,String>? ): ClassCreator(par
                         "public ${variable.second} ${getterName}(){return ${variable.first};}",
                         extractedClass
                     )
-                    val setterName = "set${variable.first!!.replaceFirstChar { it.uppercase() }}"
+                    val setterName =nameService.getSetterName(variable.first!!)
                     val setter = JavaPsiFacade.getElementFactory(project).createMethodFromText(
                         "public void ${setterName}(${variable.second} ${variable.first}){this.${variable.first}=${variable.first};}",
                         extractedClass

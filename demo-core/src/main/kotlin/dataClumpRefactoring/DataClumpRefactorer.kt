@@ -23,8 +23,9 @@ import com.intellij.util.IncorrectOperationException
 import com.intellij.psi.impl.source.PsiParameterImpl;
 import javaslang.Tuple
 import javaslang.Tuple3
+import org.jetbrains.kotlin.psi.psiUtil.startOffset
 
-class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String,val nameTypesPair: List<Pair<String,String>>) {}
+class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String,val nameTypesPair: List<Pair<String,String>>, val position: Position) {}
 
 open class DataClumpRefactorer(private val projectPath:File) {
     fun getURI(path: String): String? {
@@ -46,14 +47,17 @@ open class DataClumpRefactorer(private val projectPath:File) {
                 context.from_class_or_interface_name,
                 context.from_method_name,
                 dataClumpTypeSplitted[0],
-                context.data_clump_data.values.map { Pair(it.name,it.type)}
+                context.data_clump_data.values.map { Pair(it.name,it.type)},
+                context.data_clump_data.values.map { it.position }.first()
             ),
             DataClumpEndpoint(
                 getURI(context.to_file_path)!!,
                 context.to_class_or_interface_name,
                 context.to_method_name,
                 dataClumpTypeSplitted[2],
-                context.data_clump_data.values.map { Pair(it.to_variable.name,it.to_variable.type)}
+                context.data_clump_data.values.map { Pair(it.to_variable.name,it.to_variable.type)},
+                context.data_clump_data.values.map { it.to_variable.position }.first()
+
             )
         )
 
@@ -128,10 +132,10 @@ open class DataClumpRefactorer(private val projectPath:File) {
         }
         session.launch()
     }
-    protected fun getMethodAndParamsToRefactor(dataClumpClass:PsiClass?,methodName:String,relevantParameters:Set<String>): Tuple3<PsiMethod, List<ParameterInfoImpl>, List<PsiParameter>> {
+    protected fun getMethodAndParamsToRefactor(dataClumpClass:PsiClass?,methodName:String,relevantParameters:Set<String>,offset:Int): Tuple3<PsiMethod, List<ParameterInfoImpl>, List<PsiParameter>> {
 
             val allMethods = dataClumpClass!!.findMethodsByName(methodName, false)
-        val method = allMethods[0]
+        val method = allMethods.minBy { Math.abs(Math.abs(it.startOffset - offset)) }!!
 
         val allParams=method.parameterList.parameters
         var index = 0;
@@ -172,8 +176,8 @@ open class DataClumpRefactorer(private val projectPath:File) {
                 .filter { it.name == ep.className }
                 .first()
         if(dataClumpType=="parameters"){
-
-            val  data=getMethodAndParamsToRefactor(dataClumpClass,ep.methodName!!,relevantParameters)
+            val position=ep.position
+            val  data=getMethodAndParamsToRefactor(dataClumpClass,ep.methodName!!,relevantParameters,calculateOffset(dataClumpFile.text,position.startLine,position.startColumn))
             val method=data._1
             val parameterInfos=data._2
             if(parameterInfos.size< MIN_SIZE_OF_DATA_CLUMP){

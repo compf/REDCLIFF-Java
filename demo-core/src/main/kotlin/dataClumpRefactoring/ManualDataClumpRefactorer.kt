@@ -414,7 +414,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
 
         if (dataClumpType == "parameters") {
 
-            val data = getMethodAndParamsToRefactor(dataClumpClass, ep.methodName!!, relevantParameters)
+            val data = getMethodAndParamsToRefactor(dataClumpClass, ep.methodName!!, relevantParameters,calculateOffset(dataClumpFile.text,ep.position.startLine,ep.position.startColumn))
             val extractedClass =
                 classCreator.getOrCreateClass(project, suggestedClassName, dataClumpFile,ep.nameTypesPair, nameService)
             val method = data._1
