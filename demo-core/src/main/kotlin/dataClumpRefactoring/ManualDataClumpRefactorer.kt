@@ -202,8 +202,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
             extractedClass.constructors.first { it.parameterList.parameters.size == variableNames.size }
         if (extractedField == null) {
             extractedField = JavaPsiFacade.getElementFactory(project).createField(extractedFieldName, type)
-            //extractedField.modifierList!!.replace(JavaPsiFacade.getElementFactory(project).createKeyword("public"))
-            //extractedField.modifierList!!.setModifierProperty("public",true)
+
             extractedField.initializer = JavaPsiFacade.getElementFactory(project)
                 .createExpressionFromText("new ${extractedClass.qualifiedName}(${
                     Array(variableNames.size) { "null" }.joinToString(",")
@@ -412,7 +411,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         }
         val targetPackageName = dataClumpFile.packageName
 
-        if (dataClumpType == "parameters") {
+        if (dataClumpType == DATA_CLUMP_TYPE_PARAMETERS) {
 
             val data = getMethodAndParamsToRefactor(dataClumpClass, ep.methodName!!, relevantParameters,calculateOffset(dataClumpFile.text,ep.position.startLine,ep.position.startColumn))
             val extractedClass =
@@ -448,7 +447,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
 
             return true
         }
-        else if (dataClumpType == "fields") {
+        else if (dataClumpType ==DATA_CLUMP_TYPE_FIELDS){
             val data = getFieldsToRefactor(dataClumpClass, relevantParameters)
             val extractedClass =
                 classCreator.getOrCreateClass(project, suggestedClassName, dataClumpFile, ep.nameTypesPair, nameService)
@@ -469,34 +468,8 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
 
     }
 
-    val keyElementMap = mutableMapOf<String, PsiElement>()
-    val keyVariableNamesMap = mutableMapOf<String, Set<String>>()
-    fun isValidElement(element: PsiElement, usageType: UsageInfo.UsageType): Boolean {
-        if (element is PsiWhiteSpace || element is PsiComment) return false
-        if (usageType == UsageInfo.UsageType.VariableUsed && element.parent?.let { it.nextSibling is PsiExpressionList } == true) return false
-        return true
-    }
-
-    fun getElement(project: Project, usageInfo: UsageInfo): PsiElement? {
-        val bufferedReader: BufferedReader =
-            Path.of(this.projectPath.absolutePath, usageInfo.filePath).toFile().bufferedReader()
-        val fileContent = bufferedReader.use { it.readText() }
-        val offset = this.calculateOffset(fileContent, usageInfo.range.startLine, usageInfo.range.startColumn)
-        val man = VirtualFileManager.getInstance()
-        val vFile = man.findFileByUrl(getURI(usageInfo.filePath)!!)!!
-        vFile.refresh(false, true)
-        val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
 
 
-        val element = dataClumpFile.findElementAt(offset)
-        if (isValidElement(element!!, UsageInfo.UsageType.values()[usageInfo.symbolType])) {
-            return element!!
-        } else {
-            return null
-        }
-
-
-    }
 
 
 }

@@ -37,6 +37,8 @@ open class DataClumpRefactorer(private val projectPath:File) {
             return null
         }
     }
+    public final val  DATA_CLUMP_TYPE_FIELDS="fields"
+    public final val DATA_CLUMP_TYPE_PARAMETERS="parameters"
     fun refactorDataClump(project:Project,suggestedNameWithDataClumpTypeContext: SuggestedNameWithDataClumpTypeContext){
         val context=suggestedNameWithDataClumpTypeContext.context
         val suggestedClassName=suggestedNameWithDataClumpTypeContext.suggestedName
