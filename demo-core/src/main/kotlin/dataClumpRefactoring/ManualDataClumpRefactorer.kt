@@ -23,6 +23,21 @@ import java.nio.file.Path
 
 class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: ReferenceFinder,val classCreator:ClassCreator) : DataClumpRefactorer(projectPath) {
 
+    fun updateDocComment(method:PsiMethod,extractedClass:PsiClass,nameService: IdentifierNameService,relevantParameters: Set<String>){
+        val docComment=method.docComment
+        if(docComment!=null){
+            WriteCommandAction.runWriteCommandAction(method.project){
+                for(tags in docComment.findTagsByName("param")){
+                    if(tags.dataElements[0].text in relevantParameters){
+                        tags.delete()
+                    }
+                }
+                val paramText="The ${extractedClass.name} object"
+                docComment.add(JavaPsiFacade.getElementFactory(method.project).createDocTagFromText("@param ${nameService.getParameterName(extractedClass.name!!,method)} ${paramText}"))
+            }
+        }
+
+    }
 
     fun updateMethodSignature(
         project: Project,
@@ -49,6 +64,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                 }
             }
         }
+        updateDocComment(method,extractedClass,nameService,relevantParameterNames.toSet())
         commitAll(project)
 
     }
@@ -108,7 +124,10 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         method: PsiMethod,
         currentClass: PsiClass?,
         isParameter: Boolean
-    ): String {
+    ): String? {
+        if(element !is PsiReferenceExpression && element !is PsiIdentifier){
+            return null
+        }
         val identifier=if(element is PsiIdentifier) element.text else element.lastChild.text
         val getterName = nameService.getGetterName(identifier)
         val objectName =
@@ -128,7 +147,6 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
     ) {
         val identifier=if(element is PsiIdentifier) element.parent else element
 
-        val getterName = nameService.getGetterName(identifier.text!!)
         val method = identifier.getParentOfType<PsiMethod>(true)
         if (method == null) {
             return;
@@ -139,8 +157,12 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                 extractedClass.name!!,
                 currentClass
             )
+        val getterText = getGetterCallText(nameService, extractedClass, identifier, method, currentClass,isParameter)
+            if(getterText==null){
+                return
+            }
         val getterCall = JavaPsiFacade.getElementFactory(method.project).createExpressionFromText(
-            getGetterCallText(nameService, extractedClass, identifier, method, currentClass,isParameter),
+            getterText,
             method
         )
 

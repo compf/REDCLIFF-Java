@@ -74,8 +74,9 @@ enum class DataClumpContextInformation(val position:Int,val initializer: (dataPa
     DataclumpDetector(4,{dataPath,contextData->
         val path= dataPath.resolve("dataClumpDetectorContext.json")
         val json= java.nio.file.Files.readString(path)
-        val context= Gson().fromJson<DataClumpsTypeContext>(json,DataClumpsTypeContext::class.java)
-        contextData.dataClumps=context
+        val typeToken =genericType<Array<DataClumpsTypeContext>>()
+        val context= Gson().fromJson<Array<DataClumpsTypeContext>>(json,typeToken)
+        contextData.dataClumps=context[context.size-1]
     }),
     NameFinding(6,{dataPath,contextData->
         val path= dataPath.resolve("nameFindingContext.json")

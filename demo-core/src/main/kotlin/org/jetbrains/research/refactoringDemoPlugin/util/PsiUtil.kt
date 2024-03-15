@@ -3,6 +3,7 @@ package org.jetbrains.research.refactoringDemoPlugin.util
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.guessProjectDir
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
@@ -47,7 +48,7 @@ fun Project.extractPsiFiles(filePredicate: (VirtualFile) -> Boolean): MutableSet
     val psiManager = PsiManager.getInstance(this)
     var root=projectRootManager.contentRoots
     if(root.isEmpty()){
-        root= arrayOf(this.projectFile)
+        root= arrayOf(this.guessProjectDir())
     }
     root.mapNotNull { myRoot ->
         VfsUtilCore.iterateChildrenRecursively(myRoot, null) { virtualFile ->
