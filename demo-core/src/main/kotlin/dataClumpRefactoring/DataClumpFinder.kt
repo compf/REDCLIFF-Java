@@ -2,6 +2,7 @@ package dataClumpRefactoring
 
 import com.intellij.openapi.project.Project
 import com.intellij.psi.*
+import org.jetbrains.kotlin.idea.core.script.ucache.relativeName
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
@@ -55,7 +56,7 @@ class DataClumpFinder(private val project: Project) {
                 val dataClumpInfo = checkDataClump(var1, var2)
                 if (dataClumpInfo != null) {
                     val fromClass = var1[0].getParentOfType<PsiClass>(true)!!
-                    val toClass = var1[0].getParentOfType<PsiClass>(true)!!
+                    val toClass = var2[0].getParentOfType<PsiClass>(true)!!
                     var fromMethod: PsiMethod? = null
                     var toMethod: PsiMethod? = null
 
@@ -77,15 +78,17 @@ class DataClumpFinder(private val project: Project) {
                     DataClumpType.fields_to_fields_data_clump
                     val dataClumpDataMap = mutableMapOf<String, DataClumpsVariableFromContext>()
                     val dcContext = DataClumpTypeContext(
-                        "data_clump", createKey(var1, var2), 1.0,
-                        var1[0].containingFile.virtualFile.path,
+                        "data_clump",
+                        createKey(var1, var2),
+                        1.0,
+                        var1[0].containingFile.virtualFile.relativeName(project),
                         fromClass.name!!,
                         fromClass.qualifiedName!!,
                         fromMethod?.name,
                         buildKey(fromClass.qualifiedName, fromMethod?.name, null),
 
 
-                        var2[0].containingFile.virtualFile.path,
+                        (var2[0].containingFile.virtualFile).relativeName(project),
                         toClass.name!!,
                         toClass.qualifiedName!!,
                         toMethod?.name,

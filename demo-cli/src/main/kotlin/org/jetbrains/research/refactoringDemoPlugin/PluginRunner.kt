@@ -29,12 +29,12 @@ import com.intellij.refactoring.introduceParameterObject.*
 import com.intellij.openapi.vfs.newvfs.RefreshQueue
 import io.ktor.util.date.*
 import com.intellij.openapi.project.ex.ProjectManagerEx
-import dataClumpRefactoring.*
 import com.google.gson.reflect.TypeToken
 import com.intellij.ide.impl.ProjectUtil
 import com.intellij.ide.impl.getTrustedState
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.stateStore
+import dataClumpRefactoring.*
 import javaslang.collection.TreeMap
 import org.jetbrains.kotlin.idea.codeInsight.shorten.ensureNoRefactoringRequestsBeforeRefactoring
 import org.jetbrains.research.refactoringDemoPlugin.util.getAllRelevantVariables
@@ -50,7 +50,7 @@ object PluginRunner : ApplicationStarter {
         get() =ApplicationStarter.NOT_IN_EDT
 
     override fun main(args: List<String>) {
-        DataClumpRefactorer().main(args.drop(1))
+        DataClumpContextData.DataClumpRefactorer().main(args.drop(1))
     }
 }
 class DataClumpFinderRunner :CliktCommand(){
@@ -70,107 +70,125 @@ class DataClumpFinderRunner :CliktCommand(){
     }
 }
 inline fun <reified T> genericType() = object: TypeToken<T>() {}.type
-enum class DataClumpContextInformation(val position:Int,val initializer: (dataPath:Path,DataClumpContextData)->Unit){
-    DataclumpDetector(4,{dataPath,contextData->
-        val path= dataPath.resolve("dataClumpDetectorContext.json")
-        val json= java.nio.file.Files.readString(path)
-        val typeToken =genericType<Array<DataClumpsTypeContext>>()
-        val context= Gson().fromJson<Array<DataClumpsTypeContext>>(json,typeToken)
-        contextData.dataClumps=context[context.size-1]
-    }),
-    NameFinding(6,{dataPath,contextData->
-        val path= dataPath.resolve("nameFindingContext.json")
-        val json= java.nio.file.Files.readString(path)
-        val context= Gson().fromJson<Map<String,String>>(json,Map::class.java)
-        contextData.classNames=context
-    }),
-    ClassExtracting(7,{dataPath,contextData->
-        val path= dataPath.resolve("classExtractionContext.json")
-        val json= java.nio.file.Files.readString(path)
-        val context= Gson().fromJson<Map<String,String>>(json,Map::class.java)
-        contextData.extractedClassPaths=context
-    }),
-    ReferenceFinding(8, {dataPath,contextData->
-        val path= dataPath.resolve("usageFindingContext.json")
-        val json= java.nio.file.Files.readString(path)
-        val typeToken =genericType<Map<String, ArrayList<UsageInfo>>>()
+class DataClumpContextData(val dataClumpContextPath:String?,val referenceFindingContextePath:String?,val classNamesContextPath:String?,val extractedClassContextsPath:String?) {
+    var dataClumps: DataClumpsTypeContext? = null
+    var usageFinder: ReferenceFinder? = null
+    var classNames: Map<String, String>? = null
+    var classCreator: ClassCreator? = null
 
-        val context= Gson().fromJson<Map<String, ArrayList<UsageInfo>>>(json,typeToken)
-        contextData.usageInfos=context
-    })
-
-}
-class DataClumpContextData{
-    var dataClumps:DataClumpsTypeContext?=null
-    var usageInfos:Map<String,Iterable<UsageInfo>>?=null
-    var usageFinder:ReferenceFinder?=null
-    var classNames:Map<String,String>?=null
-    var extractedClassPaths:Map<String,String>?=null
-}
-class DataClumpRefactorer : CliktCommand() {
-    private val myProjectPath by
-    argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
-
-    //https://github.com/JetBrains/intellij-community/blob/cb1f19a78bb9a4db29b33ff186cdb60ceab7f64c/java/java-impl-refactorings/src/com/intellij/refactoring/encapsulateFields/JavaEncapsulateFieldHelper.java#L86
-    private val dataPath by
-    argument(help = "Path to the context data").file(mustExist = true, canBeFile = false).optional()
-    private val availableContexts by argument(help = "Integer that identifies which contexts are available").optional()
-
-    interface ProjectLoader{
-        fun loadProject(path: Path,executor:PluginExecutor):Unit
+    fun initialize(project: Project) {
+        if (dataClumpContextPath != null) {
+            val json = java.nio.file.Files.readString(Path.of(dataClumpContextPath))
+            val typeToken = genericType<Array<DataClumpsTypeContext>>()
+            val context = Gson().fromJson<Array<DataClumpsTypeContext>>(json, typeToken)
+            this.dataClumps = context[context.size - 1]
+        } else {
+            val finder = DataClumpFinder(project)
+            this.dataClumps = finder.run()
+        }
+        if (referenceFindingContextePath != null) {
+            val json = java.nio.file.Files.readString(Path.of(referenceFindingContextePath))
+            val typeToken = genericType<Map<String, ArrayList<UsageInfo>>>()
+            val context = Gson().fromJson<Map<String, ArrayList<UsageInfo>>>(json, typeToken)
+            this.usageFinder = UsageInfoBasedFinder(project, context)
+        } else {
+            this.usageFinder = FullReferenceFinder()
+        }
+        if (classNamesContextPath != null) {
+            val json = java.nio.file.Files.readString(Path.of(classNamesContextPath))
+            val context = Gson().fromJson<Map<String, String>>(json, Map::class.java)
+            this.classNames = context
+        } else {
+            this.classNames = generatePrimitiveClassNames(this.dataClumps!!.data_clumps)
+        }
+        if (extractedClassContextsPath != null) {
+            val json = java.nio.file.Files.readString(Path.of(extractedClassContextsPath))
+            val context = Gson().fromJson<Map<String, String>>(json, Map::class.java)
+            this.classCreator = ManualJavaClassCreator(context)
+        } else {
+            this.classCreator = ManualJavaClassCreator(null)
+        }
     }
-    class PluginExecutor(val myProjectPath:File,val dataPath:Path,val availableContexts:Int){
-        val dataClumpContextData=DataClumpContextData()
-        init {
-            for(context in DataClumpContextInformation.values()){
-                val mask=1 shl context.position
-                if(availableContexts and mask!=0){
-                    context.initializer(dataPath,dataClumpContextData)
-                }
-            }
 
+    private fun generatePrimitiveClassNames(dataClumps: Map<String, DataClumpTypeContext>): Map<String, String>? {
+        val result = mutableMapOf<String, String>()
+        for ((key, value) in dataClumps) {
+            val className = value.data_clump_data.values.joinToString("_") { it.name }
+            result[key] = className
+        }
+        return result
+    }
+
+    class DataClumpRefactorer : CliktCommand() {
+        private val myProjectPath by
+        argument(help = "Path to the project").file(mustExist = true, canBeFile = false)
+
+        //https://github.com/JetBrains/intellij-community/blob/cb1f19a78bb9a4db29b33ff186cdb60ceab7f64c/java/java-impl-refactorings/src/com/intellij/refactoring/encapsulateFields/JavaEncapsulateFieldHelper.java#L86
+        private val dataPath by
+        argument(help = "Path to the context data").file(mustExist = true, canBeFile = true).optional()
+        private val availableContexts by argument(help = "Integer that identifies which contexts are available").optional()
+
+        interface ProjectLoader {
+            fun loadProject(path: Path, executor: PluginExecutor): Unit
         }
 
+        class PluginExecutor(val myProjectPath: File, val contextPath: Path, val availableContexts: Int) {
+            var dataClumpContextData = DataClumpContextData(null, null, null, null)
 
-        fun executePlugin(project: Project){
-            ApplicationManager.getApplication().invokeAndWait() {
+            init {
+                dataClumpContextData =
+                    Gson().fromJson(java.nio.file.Files.readString(contextPath), DataClumpContextData::class.java)
+            }
 
-                this.dataClumpContextData.usageFinder=UsageInfoBasedFinder(project,dataClumpContextData.usageInfos!!)
-               val refactorer= ManualDataClumpRefactorer(myProjectPath,dataClumpContextData.usageFinder!!,ManualJavaClassCreator(dataClumpContextData.extractedClassPaths))
-                var counter=0
-                for ((key, value) in dataClumpContextData.dataClumps!!.data_clumps) {
-                    this.dataClumpContextData.usageFinder!!.updateDataClumpKey(key)
-                    println("Starting refactor $key")
-                    refactorer.refactorDataClump(project, SuggestedNameWithDataClumpTypeContext(dataClumpContextData.classNames!![key]!!, value))
-                    println("### refactored $key")
-                    refactorer.commitAll(project)
-                    counter++
 
-                }
-                println("### starting refactor")
-                println("### finnished refactor")
+            fun executePlugin(project: Project) {
+                ApplicationManager.getApplication().invokeAndWait() {
+                    dataClumpContextData.initialize(project)
 
-                println("### saving")
-                println("### exiting")
-                Thread.sleep(10*1000)
-                exitProcess(0)
+                    val refactorer = ManualDataClumpRefactorer(
+                        myProjectPath,
+                        dataClumpContextData.usageFinder!!,
+                        dataClumpContextData.classCreator!!
+                    )
+                    var counter = 0
+                    for ((key, value) in dataClumpContextData.dataClumps!!.data_clumps) {
+                        this.dataClumpContextData.usageFinder!!.updateDataClumpKey(key)
+                        println("Starting refactor $key")
+                        refactorer.refactorDataClump(
+                            project,
+                            SuggestedNameWithDataClumpTypeContext(dataClumpContextData.classNames!![key]!!, value)
+                        )
+                        println("### refactored $key")
+                        refactorer.commitAll(project)
+                        counter++
+
                     }
+                    println("### starting refactor")
+                    println("### finnished refactor")
 
-        }
-    }
-    class OpenProjectWithResolveLoader:ProjectLoader{
-        override fun loadProject(path: Path,executor: PluginExecutor): Unit {
-            val opener=getKotlinJavaRepositoryOpener()
-            var result= opener.openProjectWithResolve(path) {
-                val project = it
-                executor.executePlugin(project)
-                return@openProjectWithResolve true
+                    println("### saving")
+                    println("### exiting")
+                    Thread.sleep(10 * 1000)
+                    exitProcess(0)
+                }
 
             }
         }
-    }
-    class OpenSingleProjectLoader:ProjectLoader{
-        /*
+
+        class OpenProjectWithResolveLoader : ProjectLoader {
+            override fun loadProject(path: Path, executor: PluginExecutor): Unit {
+                val opener = getKotlinJavaRepositoryOpener()
+                var result = opener.openProjectWithResolve(path) {
+                    val project = it
+                    executor.executePlugin(project)
+                    return@openProjectWithResolve true
+
+                }
+            }
+        }
+
+        class OpenSingleProjectLoader : ProjectLoader {
+            /*
         partially works with
             gradle project created in IntelliJ
             clean gradle project
@@ -180,45 +198,46 @@ class DataClumpRefactorer : CliktCommand() {
             maven projects
         * */
 
-        override fun loadProject(path: Path,executor: PluginExecutor): Unit {
-            val opener=getKotlinJavaRepositoryOpener()
-            try{
-                var result= opener.openSingleProject(path) {
-                    val project = it
-                   executor.executePlugin(project)
-                    return@openSingleProject true
+            override fun loadProject(path: Path, executor: PluginExecutor): Unit {
+                val opener = getKotlinJavaRepositoryOpener()
+                try {
+                    var result = opener.openSingleProject(path) {
+                        val project = it
+                        executor.executePlugin(project)
+                        return@openSingleProject true
 
+                    }
+                } catch (e: Exception) {
+                    println("### error")
+                    println(e)
+                    throw e
                 }
             }
-            catch (e:Exception){
-                println("### error")
-                println(e)
-                throw e
-            }
         }
-    }
-    /*
+
+        /*
     works with
         intellij projects
      works partially with
          intelli maven project (only new files)
          intelli gradle
      */
-    class OpenProjectLoader:ProjectLoader{
-        override fun loadProject(path: Path,executor: PluginExecutor): Unit {
-            try {
-                val result=ProjectUtil.openProject(path.toString(),null,true)
-                executor.executePlugin(result!!)
-            }catch (e:Exception) {
-                println("### error")
-                println(e)
-                throw e
-            }
+        class OpenProjectLoader : ProjectLoader {
+            override fun loadProject(path: Path, executor: PluginExecutor): Unit {
+                try {
+                    val result = ProjectUtil.openProject(path.toString(), null, true)
+                    executor.executePlugin(result!!)
+                } catch (e: Exception) {
+                    println("### error")
+                    println(e)
+                    throw e
+                }
 
+            }
         }
-    }
-    class OpenOrImportProjectLoader:ProjectLoader{
-        /*
+
+        class OpenOrImportProjectLoader : ProjectLoader {
+            /*
         partially works with
              raw gradle project
              raw maven project
@@ -229,20 +248,21 @@ class DataClumpRefactorer : CliktCommand() {
 
 
          */
-        override fun loadProject(path: Path,executor: PluginExecutor): Unit {
-            try {
-                val project=ProjectUtil.openOrImport(path,null,false)
-                executor.executePlugin(project!!)
+            override fun loadProject(path: Path, executor: PluginExecutor): Unit {
+                try {
+                    val project = ProjectUtil.openOrImport(path, null, false)
+                    executor.executePlugin(project!!)
 
-            }catch (e:Exception) {
-                println("### error")
-                println(e)
-                throw e
+                } catch (e: Exception) {
+                    println("### error")
+                    println(e)
+                    throw e
+                }
+
             }
-
         }
-    }
-    /*
+
+        /*
     Works with
         raw mavem project
         intellij project
@@ -252,65 +272,62 @@ class DataClumpRefactorer : CliktCommand() {
         intelliJ maven project
 
      */
-    class LoadAndOpenProjectLoader:ProjectLoader{
-        override fun loadProject(path: Path,executor: PluginExecutor): Unit {
-            try {
-                val projectManager = ProjectManager.getInstance()
-                val project = projectManager.loadAndOpenProject(path.toString())!!
-                executor.executePlugin(project)
+        class LoadAndOpenProjectLoader : ProjectLoader {
+            override fun loadProject(path: Path, executor: PluginExecutor): Unit {
+                try {
+                    val projectManager = ProjectManager.getInstance()
+                    val project = projectManager.loadAndOpenProject(path.toString())!!
+                    executor.executePlugin(project)
+                } catch (e: Exception) {
+                    println("### error")
+                    println(e)
+                    throw e
+                }
+
             }
-            catch (e:Exception){
+        }
+
+        fun decodeToInt(value: String): Int {
+            var base = 10
+            val trimmed = value
+            if (value.startsWith("0x")) {
+                base = 16
+                trimmed.substring(2)
+            } else if (value.startsWith("0b")) {
+                base = 2
+                trimmed.substring(2)
+            } else if (value.startsWith("0")) {
+                base = 8
+                trimmed.substring(1)
+            }
+            return Integer.parseInt(trimmed, base)
+        }
+
+        override fun run() {
+            println("### starting refactor")
+
+            //VirtualFileManager.getInstance().syncRefresh()
+            val projectManager = ProjectManagerEx.getInstanceEx()
+            //projectManager.loadProject()
+            // projectManager.closeAndDisposeAllProjects(true)
+
+
+            val opener = LoadAndOpenProjectLoader()
+            print("init")
+            var project: Project? = null
+            try {
+                val availableContext = availableContexts?.let { decodeToInt(it) } ?: Int.MAX_VALUE
+                val executor = PluginExecutor(myProjectPath, dataPath!!.toPath(), availableContext)
+                opener.loadProject(myProjectPath.toPath(), executor)
+            } catch (e: Exception) {
                 println("### error")
-                println(e)
+                e.printStackTrace()
                 throw e
             }
 
+
+
+            exitProcess(0)
         }
-    }
-    fun decodeToInt(value:String):Int{
-        var base=10
-        val trimmed=value
-        if(value.startsWith("0x")){
-            base=16
-            trimmed.substring(2)
-        }
-        else if(value.startsWith("0b")){
-            base=2
-            trimmed.substring(2)
-        }
-        else if(value.startsWith("0")){
-            base=8
-            trimmed.substring(1)
-        }
-        return Integer.parseInt(trimmed,base)
-    }
-
-    override fun run() {
-        println("### starting refactor")
-
-        //VirtualFileManager.getInstance().syncRefresh()
-        val projectManager = ProjectManagerEx.getInstanceEx()
-        //projectManager.loadProject()
-       // projectManager.closeAndDisposeAllProjects(true)
-
-
-
-        val opener=LoadAndOpenProjectLoader()
-        print("init")
-        var project:Project?=null
-        try{
-            val availableContext=availableContexts?.let { decodeToInt(it) } ?: Int.MAX_VALUE
-            val executor=PluginExecutor(myProjectPath, dataPath!!.toPath(),availableContext)
-             opener.loadProject(myProjectPath.toPath(),executor)
-        }
-        catch (e:Exception){
-            println("### error")
-          e.printStackTrace()
-            throw e
-        }
-
-
-
-        exitProcess(0)
     }
 }
