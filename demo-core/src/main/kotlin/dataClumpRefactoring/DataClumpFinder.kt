@@ -120,8 +120,9 @@ class DataClumpFinder(private val project: Project) {
 
                     j++
                 }
-                i++
+                j++
             }
+            i++
 
 
         }

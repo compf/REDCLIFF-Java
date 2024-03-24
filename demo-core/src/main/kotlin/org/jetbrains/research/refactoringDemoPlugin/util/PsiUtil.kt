@@ -9,6 +9,8 @@ import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.*
 import com.intellij.psi.search.FilenameIndex
+import com.intellij.psi.search.PsiSearchHelper
+import com.intellij.psi.search.searches.OverridingMethodsSearch
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.idea.hierarchy.overrides.isOverrideHierarchyElement
 import org.jetbrains.kotlin.psi.KtFile
@@ -21,7 +23,8 @@ fun  Project.getAllRelevantVariables(minSize:Int):ArrayList<List<PsiVariable>>{
         }
 
         for(method in cls.methods){
-            if(method.parameterList.parameters.size>=minSize){
+
+           if ( method.findSuperMethods().none() && method.parameterList.parameters.size>=minSize){
                 result.add( method.parameterList.parameters.toList())
             }
 

@@ -24,6 +24,7 @@ import com.intellij.psi.impl.source.PsiParameterImpl;
 import javaslang.Tuple
 import javaslang.Tuple3
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
+import kotlin.io.path.Path
 
 class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String,val nameTypesPair: List<Pair<String,String>>, val position: Position) {}
 
@@ -42,13 +43,12 @@ open class DataClumpRefactorer(private val projectPath:File) {
     fun refactorDataClump(project:Project,suggestedNameWithDataClumpTypeContext: SuggestedNameWithDataClumpTypeContext){
         val context=suggestedNameWithDataClumpTypeContext.context
         val suggestedClassName=suggestedNameWithDataClumpTypeContext.suggestedName
-        val dataClumpTypeSplitted=context.data_clump_type.toString().split("_")
         val endpoints = arrayOf(
             DataClumpEndpoint(
                 getURI(context.from_file_path)!!,
                 context.from_class_or_interface_name,
                 context.from_method_name,
-                dataClumpTypeSplitted[0],
+                if(context.from_method_name==null) DATA_CLUMP_TYPE_FIELDS else DATA_CLUMP_TYPE_PARAMETERS,
                 context.data_clump_data.values.map { Pair(it.name,it.type)},
                 context.data_clump_data.values.map { it.position }.first()
             ),
@@ -56,15 +56,19 @@ open class DataClumpRefactorer(private val projectPath:File) {
                 getURI(context.to_file_path)!!,
                 context.to_class_or_interface_name,
                 context.to_method_name,
-                dataClumpTypeSplitted[2],
+                if(context.to_method_name==null) DATA_CLUMP_TYPE_FIELDS else DATA_CLUMP_TYPE_PARAMETERS,
                 context.data_clump_data.values.map { Pair(it.to_variable.name,it.to_variable.type)},
                 context.data_clump_data.values.map { it.to_variable.position }.first()
 
             )
         )
-
+    println(endpoints[0].filePath +" " + endpoints[1].filePath)
         var loopedOnce=false
         for (ep in endpoints) {
+            if(!java.nio.file.Files.exists(Path((ep.filePath.replace("file://",""))))){
+                println("ignoring "+ep.filePath)
+                continue;
+            }
 
             loopedOnce=refactorDataClumpEndpoint(ep.dataClumpType,project, suggestedClassName,suggestedClassName in nameClassMap || loopedOnce ,ep,context.data_clump_data.values.map { it.name }.toSet())
 
@@ -134,11 +138,14 @@ open class DataClumpRefactorer(private val projectPath:File) {
         }
         session.launch()
     }
-    protected fun getMethodAndParamsToRefactor(dataClumpClass:PsiClass?,methodName:String,relevantParameters:Set<String>,offset:Int): Tuple3<PsiMethod, List<ParameterInfoImpl>, List<PsiParameter>> {
+    protected fun getMethodAndParamsToRefactor(dataClumpClass:PsiClass?,methodName:String,relevantParameters:Set<String>,offset:Int): Tuple3<PsiMethod, List<ParameterInfoImpl>, List<PsiParameter>>? {
 
             val allMethods = dataClumpClass!!.findMethodsByName(methodName, false)
-        val method = allMethods.minBy { Math.abs(Math.abs(it.startOffset - offset)) }!!
-
+        val method = allMethods.filter { it.parameterList.parameters.size>=relevantParameters.size  && it.parameterList.parameters.map { it.name }.containsAll(relevantParameters)}.minByOrNull { Math.abs(Math.abs(it.startOffset - offset)) }
+    if(method==null){
+      println(methodName+" not found with parameters "+relevantParameters.joinToString(",")+" in "+dataClumpClass.name)
+        return null
+    }
         val allParams=method.parameterList.parameters
         var index = 0;
         val parameters=mutableListOf<PsiParameter>()
@@ -180,6 +187,9 @@ open class DataClumpRefactorer(private val projectPath:File) {
         if(dataClumpType=="parameters"){
             val position=ep.position
             val  data=getMethodAndParamsToRefactor(dataClumpClass,ep.methodName!!,relevantParameters,calculateOffset(dataClumpFile.text,position.startLine,position.startColumn))
+            if(data==null){
+                return false
+            }
             val method=data._1
             val parameterInfos=data._2
             if(parameterInfos.size< MIN_SIZE_OF_DATA_CLUMP){
@@ -280,4 +290,20 @@ open class DataClumpRefactorer(private val projectPath:File) {
         }
         return true
     }
+
+     fun findClassRec(classes: Array<PsiClass>, className: String): PsiClass?{
+        for (cls in classes){
+            if(cls.name==className){
+                return cls
+            }
+            val innerClasses=cls.innerClasses
+            if(innerClasses.isNotEmpty()){
+                val innerClass=findClassRec(innerClasses,className)
+                if(innerClass!=null){
+                    return innerClass
+                }
+            }
+        }
+        return null
+     }
 }

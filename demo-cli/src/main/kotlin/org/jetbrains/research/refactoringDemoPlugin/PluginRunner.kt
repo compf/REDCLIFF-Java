@@ -70,13 +70,17 @@ class DataClumpFinderRunner :CliktCommand(){
     }
 }
 inline fun <reified T> genericType() = object: TypeToken<T>() {}.type
-class DataClumpContextData(val dataClumpContextPath:String?,val referenceFindingContextePath:String?,val classNamesContextPath:String?,val extractedClassContextsPath:String?) {
+enum class RefactorMode{
+    None,Manual,Automatic
+}
+class DataClumpContextData(val dataClumpContextPath:String?,val referenceFindingContextePath:String?,val classNamesContextPath:String?,val extractedClassContextsPath:String?,val refactorMode:String?) {
     var dataClumps: DataClumpsTypeContext? = null
     var usageFinder: ReferenceFinder? = null
     var classNames: Map<String, String>? = null
     var classCreator: ClassCreator? = null
+    var refactorer:dataClumpRefactoring.DataClumpRefactorer?=null
 
-    fun initialize(project: Project) {
+    fun initialize(project: Project,projectPath:File) {
         if (dataClumpContextPath != null) {
             val json = java.nio.file.Files.readString(Path.of(dataClumpContextPath))
             val typeToken = genericType<Array<DataClumpsTypeContext>>()
@@ -108,12 +112,23 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
         } else {
             this.classCreator = ManualJavaClassCreator(null)
         }
+        if(refactorMode==RefactorMode.Manual.name){
+            this.refactorer=ManualDataClumpRefactorer(projectPath ,this.usageFinder!!,this.classCreator!!)
+        }
+        else{ if(refactorMode==RefactorMode.Automatic.name){
+            this.refactorer=dataClumpRefactoring.DataClumpRefactorer(projectPath)
+        }
+            else {
+                this.refactorer= NoRefactoringRunner(projectPath,this.classCreator!!)
+            }
+
+        }
     }
 
     private fun generatePrimitiveClassNames(dataClumps: Map<String, DataClumpTypeContext>): Map<String, String>? {
         val result = mutableMapOf<String, String>()
         for ((key, value) in dataClumps) {
-            val className = value.data_clump_data.values.joinToString("_") { it.name }
+            val className = value.data_clump_data.values.map { it.name.replaceFirstChar { it.uppercase() } }.sorted().joinToString("_")
             result[key] = className
         }
         return result
@@ -133,7 +148,7 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
         }
 
         class PluginExecutor(val myProjectPath: File, val contextPath: Path, val availableContexts: Int) {
-            var dataClumpContextData = DataClumpContextData(null, null, null, null)
+            var dataClumpContextData = DataClumpContextData(null, null, null, null,null)
 
             init {
                 dataClumpContextData =
@@ -143,28 +158,26 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
 
             fun executePlugin(project: Project) {
                 ApplicationManager.getApplication().invokeAndWait() {
-                    dataClumpContextData.initialize(project)
+                    dataClumpContextData.initialize(project,myProjectPath)
 
-                    val refactorer = ManualDataClumpRefactorer(
-                        myProjectPath,
-                        dataClumpContextData.usageFinder!!,
-                        dataClumpContextData.classCreator!!
-                    )
+                    val refactorer =dataClumpContextData.refactorer!!
                     var counter = 0
-                    for ((key, value) in dataClumpContextData.dataClumps!!.data_clumps) {
-                        this.dataClumpContextData.usageFinder!!.updateDataClumpKey(key)
-                        println("Starting refactor $key")
+                    val count= dataClumpContextData.dataClumps!!.data_clumps!!.size.toDouble()
+                    val data_clumps= dataClumpContextData.dataClumps!!.data_clumps.values.sortedByDescending { it.data_clump_data.size }
+                    for (value in data_clumps) {
+                        this.dataClumpContextData.usageFinder!!.updateDataClumpKey(value.key)
+                        println("Starting refactor ${value.key}")
                         refactorer.refactorDataClump(
                             project,
-                            SuggestedNameWithDataClumpTypeContext(dataClumpContextData.classNames!![key]!!, value)
+                            SuggestedNameWithDataClumpTypeContext(dataClumpContextData.classNames!![value.key]!!, value)
                         )
-                        println("### refactored $key")
+                        println("### refactored ${value.key}")
                         refactorer.commitAll(project)
                         counter++
+                        println(counter/count*100)
 
                     }
-                    println("### starting refactor")
-                    println("### finnished refactor")
+
 
                     println("### saving")
                     println("### exiting")
