@@ -26,7 +26,7 @@ import javaslang.Tuple3
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import kotlin.io.path.Path
 
-class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String,val nameTypesPair: List<Pair<String,String>>, val position: Position) {}
+class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String,val dataClumpKey:String, val position: Position) {}
 
 open class DataClumpRefactorer(private val projectPath:File) {
     fun getURI(path: String): String? {
@@ -49,7 +49,7 @@ open class DataClumpRefactorer(private val projectPath:File) {
                 context.from_class_or_interface_name,
                 context.from_method_name,
                 if(context.from_method_name==null) DATA_CLUMP_TYPE_FIELDS else DATA_CLUMP_TYPE_PARAMETERS,
-                context.data_clump_data.values.map { Pair(it.name,it.type)},
+                suggestedNameWithDataClumpTypeContext.context.key,
                 context.data_clump_data.values.map { it.position }.first()
             ),
             DataClumpEndpoint(
@@ -57,7 +57,7 @@ open class DataClumpRefactorer(private val projectPath:File) {
                 context.to_class_or_interface_name,
                 context.to_method_name,
                 if(context.to_method_name==null) DATA_CLUMP_TYPE_FIELDS else DATA_CLUMP_TYPE_PARAMETERS,
-                context.data_clump_data.values.map { Pair(it.to_variable.name,it.to_variable.type)},
+                suggestedNameWithDataClumpTypeContext.context.key,
                 context.data_clump_data.values.map { it.to_variable.position }.first()
 
             )

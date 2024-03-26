@@ -26,7 +26,7 @@ class NoRefactoringRunner(projectPath: File, val classCreator: ClassCreator):Dat
         if(variables==null){
             return false
         }
-        classCreator.getOrCreateClass(project, suggestedClassName, dataClumpFile, variables,nameService)
+        classCreator.getOrCreateClass(project, suggestedClassName,ep.dataClumpKey, dataClumpFile, variables,nameService)
         return true
     }
 }

@@ -40,6 +40,8 @@ import org.jetbrains.kotlin.idea.codeInsight.shorten.ensureNoRefactoringRequests
 import org.jetbrains.research.refactoringDemoPlugin.util.getAllRelevantVariables
 import org.jetbrains.uast.evaluation.toConstant
 import java.nio.file.Path
+import java.security.MessageDigest
+import java.util.Base64
 
 object PluginRunner : ApplicationStarter {
     @Deprecated("Specify it as `id` for extension definition in a plugin descriptor")
@@ -128,10 +130,27 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
     private fun generatePrimitiveClassNames(dataClumps: Map<String, DataClumpTypeContext>): Map<String, String>? {
         val result = mutableMapOf<String, String>()
         for ((key, value) in dataClumps) {
-            val className = value.data_clump_data.values.map { it.name.replaceFirstChar { it.uppercase() } }.sorted().joinToString("_")
+            val className = value.data_clump_data.values.map {
+                val validTypeName=makeValidJavaIdentifier(it.type).replaceFirstChar { it.uppercase() }
+                it.name.replaceFirstChar { it.uppercase() } +"_"+ validTypeName
+
+
+            }.sorted().joinToString("_")
             result[key] = className
         }
         return result
+    }
+    private fun makeValidJavaIdentifier(input: String): String {
+
+        val toReplace= arrayOf(".","[","]","<",">")
+        var result=input
+        for(value in toReplace){
+            result=result.replace(value,"_")
+        }
+        val MAX_LENGTH=16
+        val length=Math.min(MAX_LENGTH,result.length)
+        return result.substring(result.length-length)
+
     }
 
     class DataClumpRefactorer : CliktCommand() {

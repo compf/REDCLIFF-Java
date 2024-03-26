@@ -13,6 +13,7 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.SearchScope
 import com.intellij.psi.search.searches.OverridingMethodsSearch
 import com.intellij.psi.search.searches.ReferencesSearch
+import com.intellij.psi.util.PsiTypesUtil
 import java.io.File
 import com.intellij.psi.util.childrenOfType
 
@@ -373,6 +374,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                 exprList.argumentList.add(newExpr)
 
             } else {
+                //exprList.argumentList.expressions[insertionPos-1].replace(newExpr)
                 exprList.argumentList.addAfter(newExpr, exprList.argumentList.expressions[insertionPos - 1])
             }
             commitAll(project)
@@ -490,8 +492,12 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
             if (data == null) {
                 return false
             }
+            if(data._3.any{ PsiTypesUtil.getPsiClass(it.type)==null && it.type !is PsiPrimitiveType}){
+                return false
+
+            }
             val extractedClass =
-                classCreator.getOrCreateClass(project, suggestedClassName, dataClumpFile, data._3, nameService)
+                classCreator.getOrCreateClass(project,suggestedClassName,ep.dataClumpKey, dataClumpFile, data._3, nameService)
             val method = data._1
 
             val methodUsages = refFinder.findMethodUsages(method)
@@ -527,8 +533,12 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
             if(data.none()){
                 return false
             }
+            if(data.any{ PsiTypesUtil.getPsiClass(it.type)==null && it.type !is PsiPrimitiveType}){
+                return false
+
+            }
             val extractedClass =
-                classCreator.getOrCreateClass(project, suggestedClassName, dataClumpFile, data, nameService)
+                classCreator.getOrCreateClass(project,suggestedClassName,ep.dataClumpKey, dataClumpFile, data, nameService)
             for (field in data) {
                 if (field.name !in relevantParameters) continue
                 val fieldUsages = refFinder.findFieldUsages(field)
