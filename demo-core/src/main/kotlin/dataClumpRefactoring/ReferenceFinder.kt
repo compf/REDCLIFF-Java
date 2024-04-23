@@ -3,14 +3,17 @@ package dataClumpRefactoring
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.*
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.search.searches.OverridingMethodsSearch
+import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.PsiUtil
+import com.intellij.psi.util.elementType
 import org.jetbrains.kotlin.idea.search.usagesSearch.searchReferencesOrMethodReferences
 import org.jetbrains.kotlin.psi.psiUtil.findDescendantOfType
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.research.refactoringDemoPlugin.util.extractKotlinAndJavaClasses
-
 interface ReferenceFinder {
 
     fun findFieldUsages(field: PsiField): List<PsiElement>
@@ -27,6 +30,26 @@ interface ReferenceFinder {
 
 
 }
+class PsiReferenceFinder:ReferenceFinder
+{
+    override fun findFieldUsages(field: PsiField): List<PsiElement> {
+       return ReferencesSearch.search(field).map { it.element }.toList()
+    }
+
+    override fun findParameterUsages(parameter: PsiParameter): List<PsiElement> {
+        return ReferencesSearch.search(parameter).map { it.element }.toList()
+    }
+
+    override fun findMethodUsages(method: PsiMethod): List<PsiElement> {
+        return ReferencesSearch.search(method).map { it.element }.toList()
+    }
+
+    override fun findMethodOverrides(method: PsiMethod): List<PsiMethod> {
+        val res= OverridingMethodsSearch.search(method,GlobalSearchScope.allScope(method.project),true).map { it }.toList()
+        return res
+    }
+
+}   
 class FullReferenceFinder : ReferenceFinder {
     override fun findFieldUsages(field: PsiField): List<PsiElement> {
         var relevantClasses: List<PsiClass>
@@ -61,7 +84,8 @@ class FullReferenceFinder : ReferenceFinder {
         }
         return result
     }
-
+    fun nop(){
+    }
     override fun findMethodOverrides(method: PsiMethod): List<PsiMethod> {
         val result= mutableListOf<PsiMethod>()
         val relevantClasses=method.project.extractKotlinAndJavaClasses()
@@ -97,6 +121,7 @@ class UsageInfoBasedFinder (val project:Project,val usagesMap:Map<String,Iterabl
     }
 
     override fun updateDataClumpKey(dcKey: String) {
+        println(dcKey)
        usageElements=usageMapElementa[dcKey]!!
         usages=usagesMap[dcKey]!!
     }

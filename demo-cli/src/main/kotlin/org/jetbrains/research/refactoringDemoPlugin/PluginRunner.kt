@@ -34,8 +34,17 @@ import com.intellij.ide.impl.ProjectUtil
 import com.intellij.ide.impl.getTrustedState
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.stateStore
+import com.intellij.openapi.projectRoots.JavaSdk
+import com.intellij.openapi.projectRoots.ProjectJdkTable
+import com.intellij.openapi.projectRoots.Sdk
+import com.intellij.openapi.roots.ProjectRootManager
+import com.intellij.openapi.startup.StartupManager
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.util.PsiUtil
 import dataClumpRefactoring.*
 import javaslang.collection.TreeMap
+import org.jetbrains.kotlin.idea.base.util.allScope
 import org.jetbrains.kotlin.idea.codeInsight.shorten.ensureNoRefactoringRequestsBeforeRefactoring
 import org.jetbrains.research.refactoringDemoPlugin.util.getAllRelevantVariables
 import org.jetbrains.uast.evaluation.toConstant
@@ -98,7 +107,7 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
             val context = Gson().fromJson<Map<String, ArrayList<UsageInfo>>>(json, typeToken)
             this.usageFinder = UsageInfoBasedFinder(project, context)
         } else {
-            this.usageFinder = FullReferenceFinder()
+            this.usageFinder =  PsiReferenceFinder ()
         }
         if (classNamesContextPath != null) {
             val json = java.nio.file.Files.readString(Path.of(classNamesContextPath))
@@ -177,31 +186,38 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
 
             fun executePlugin(project: Project) {
                 ApplicationManager.getApplication().invokeAndWait() {
-                    dataClumpContextData.initialize(project,myProjectPath)
 
-                    val refactorer =dataClumpContextData.refactorer!!
-                    var counter = 0
-                    val count= dataClumpContextData.dataClumps!!.data_clumps!!.size.toDouble()
-                    val data_clumps= dataClumpContextData.dataClumps!!.data_clumps.values.sortedByDescending { it.data_clump_data.size }
-                    for (value in data_clumps) {
-                        this.dataClumpContextData.usageFinder!!.updateDataClumpKey(value.key)
-                        println("Starting refactor ${value.key}")
-                        refactorer.refactorDataClump(
-                            project,
-                            SuggestedNameWithDataClumpTypeContext(dataClumpContextData.classNames!![value.key]!!, value)
-                        )
-                        println("### refactored ${value.key}")
-                        refactorer.commitAll(project)
-                        counter++
-                        println(counter/count*100)
+                        val dataClumpContextData = this.dataClumpContextData
+                        dataClumpContextData.initialize(project, myProjectPath)
 
+                    val refactorer = dataClumpContextData.refactorer!!
+                        var counter = 0
+                        val count = dataClumpContextData.dataClumps!!.data_clumps!!.size.toDouble()
+                        val data_clumps =
+                            dataClumpContextData.dataClumps!!.data_clumps.values.sortedByDescending { it.data_clump_data.size }
+                        for (value in data_clumps) {
+                            this.dataClumpContextData.usageFinder!!.updateDataClumpKey(value.key)
+                            println("Starting refactor ${value.key}")
+                            refactorer.refactorDataClump(
+                                project,
+                                SuggestedNameWithDataClumpTypeContext(
+                                    dataClumpContextData.classNames!![value.key]!!,
+                                    value
+                                )
+                            )
+                            println("### refactored ${value.key}")
+                            refactorer.commitAll(project)
+                            counter++
+                            println(counter / count * 100)
+
+
+
+
+                        println("### saving")
+                        println("### exiting")
+                        Thread.sleep(10 * 1000)
+                        exitProcess(0)
                     }
-
-
-                    println("### saving")
-                    println("### exiting")
-                    Thread.sleep(10 * 1000)
-                    exitProcess(0)
                 }
 
             }
@@ -319,6 +335,8 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
             }
         }
 
+
+
         fun decodeToInt(value: String): Int {
             var base = 10
             val trimmed = value
@@ -344,7 +362,7 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
             // projectManager.closeAndDisposeAllProjects(true)
 
 
-            val opener = LoadAndOpenProjectLoader()
+            val opener = OpenProjectWithResolveLoader()
             print("init")
             var project: Project? = null
             try {
@@ -362,4 +380,15 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
             exitProcess(0)
         }
     }
+}
+fun addJdk(project: Project, jdkPath: String): Sdk? {
+    val javaSdk = JavaSdk.getInstance()
+        val projectJdkTable = ProjectJdkTable.getInstance()
+    val newSdk=javaSdk.createJdk("hello","/home/compf/data/jdks/jdk-17.0.2",false)
+        projectJdkTable.addJdk(newSdk,project)
+    val projectRootManager = ProjectRootManager.getInstance(project)
+    projectRootManager.projectSdk = newSdk
+
+
+    return null
 }

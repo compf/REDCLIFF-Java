@@ -323,6 +323,9 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
     ) {
 
         val exprList = element.getParentOfType<PsiMethodCallExpression>(true)!!
+        if(exprList.argumentList.expressions.size!=variableNames.size){
+            return
+        }
         println("method " + method.name)
         val containingMethod = element.getParentOfType<PsiMethod>(true)!!
         val constructor =
@@ -492,10 +495,10 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
             if (data == null) {
                 return false
             }
-            if(data._3.any{ PsiTypesUtil.getPsiClass(it.type)==null && it.type !is PsiPrimitiveType}){
+            /*if(data._3.any{ PsiTypesUtil.getPsiClass(it.type)==null && it.type !is PsiPrimitiveType}){
                 return false
 
-            }
+            }*/
             val extractedClass =
                 classCreator.getOrCreateClass(project,suggestedClassName,ep.dataClumpKey, dataClumpFile, data._3, nameService)
             val method = data._1
@@ -534,7 +537,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                 return false
             }
             if(data.any{ PsiTypesUtil.getPsiClass(it.type)==null && it.type !is PsiPrimitiveType}){
-                return false
+                //return false
 
             }
             val extractedClass =
