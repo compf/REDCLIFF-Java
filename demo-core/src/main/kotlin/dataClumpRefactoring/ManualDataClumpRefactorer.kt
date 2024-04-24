@@ -1,26 +1,18 @@
 package dataClumpRefactoring
 
-import com.intellij.ide.fileTemplates.JavaTemplateUtil
-import com.intellij.model.search.Searcher
-import com.intellij.openapi.application.WriteAction
+import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.*
-import com.intellij.psi.PsiManager
-import com.intellij.openapi.command.WriteCommandAction;
-import com.intellij.openapi.vfs.newvfs.RefreshQueue
-import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.SearchScope
-import com.intellij.psi.search.searches.OverridingMethodsSearch
-import com.intellij.psi.search.searches.ReferencesSearch
+import com.intellij.psi.codeStyle.CodeStyleManager
+import com.intellij.psi.codeStyle.JavaCodeStyleManager
+import com.intellij.psi.impl.source.tree.PsiWhiteSpaceImpl
 import com.intellij.psi.util.PsiTypesUtil
-import java.io.File
 import com.intellij.psi.util.childrenOfType
-
+import com.intellij.refactoring.extractMethod.newImpl.ExtractMethodHelper.addSiblingAfter
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
-import org.jetbrains.kotlin.util.collectionUtils.concat
-import java.io.BufferedReader
-import java.nio.file.Path
+import java.io.File
+
 
 class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: ReferenceFinder,val classCreator:ClassCreator) : DataClumpRefactorer(projectPath) {
 
@@ -80,6 +72,11 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
             }
         }
         updateDocComment(method, extractedClass, nameService, relevantParameterNames.toSet())
+        WriteCommandAction.runWriteCommandAction(project) {
+            optimizeCode(project,method)
+
+        }
+
         commitAll(project)
 
     }
@@ -218,6 +215,10 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
             val parent = identifier.parent
             WriteCommandAction.runWriteCommandAction(project) {
                 identifier.lastChild.replace(getterCall)
+                if(identifier.nextSibling!=null && (identifier.nextSibling.text=="," || identifier.nextSibling.text==".")){
+
+                method.addAfter( PsiParserFacade.getInstance(project).createWhiteSpaceFromText("\n"),identifier.nextSibling)
+                }
             }
 
         }
@@ -290,6 +291,8 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                 field.nextSibling.delete()
             }
             field.delete()
+            optimizeCode(project,extractedField)
+
             commitAll(project)
         }
 
@@ -350,9 +353,13 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         }
         val insertionPos =
             method.parameterList.parameters.indexOfFirst { it.type.canonicalText == extractedClass.qualifiedName }
-
+        val MAX_LINE_LENGTH=90
+        val statement=exprList.getParentOfType<PsiStatement>(true)!!.text
+        val tooLong=statement.length>MAX_LINE_LENGTH
+        val whiteSpace=if(tooLong)"\n" else ""
+        println("too long ${statement.length} $tooLong $statement")
         var newExpr = JavaPsiFacade.getElementFactory(project)
-            .createExpressionFromText("new ${extractedClass.qualifiedName}(${argsInOrder.joinToString(",")})", exprList)
+            .createStatementFromText("new ${extractedClass.qualifiedName}($whiteSpace${argsInOrder.joinToString(",$whiteSpace")})", exprList)
         /*if (containingMethod.parameterList.parameters[insertionPos].type.canonicalText == extractedClass.qualifiedName) {
             val paramName = nameService.getParameterName(extractedClass.name!!, containingMethod)
             val name =
@@ -380,9 +387,17 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                 //exprList.argumentList.expressions[insertionPos-1].replace(newExpr)
                 exprList.argumentList.addAfter(newExpr, exprList.argumentList.expressions[insertionPos - 1])
             }
+            optimizeCode(project,exprList)
             commitAll(project)
         }
 
+
+    }
+
+    private fun optimizeCode(project: Project, element: PsiElement) {
+        JavaCodeStyleManager.getInstance(project).shortenClassReferences(element!!)
+        CodeStyleManager.getInstance(project).reformat(element.containingFile)
+        JavaCodeStyleManager.getInstance(project).optimizeImports(element.containingFile)
 
     }
 
