@@ -53,7 +53,9 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         relevantParameterNames: Array<String>,
         nameService: IdentifierNameService
     ) {
+        println("method signature ${method.name}")
         if (method.parameterList.parameters.none { it.name in relevantParameterNames }) {
+            println("No relevant parameters found")
             return;
         }
 
@@ -159,9 +161,10 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         isParameter: Boolean
     ) {
         val identifier = if (element is PsiIdentifier) element.parent else element
-
+        println("variable usage ${identifier.text}")
         val method = identifier.getParentOfType<PsiMethod>(true)
         if (method == null) {
+            println("WARNING: No method found")
             return;
         }
         val currentClass = identifier.getParentOfType<PsiClass>(true)
@@ -172,6 +175,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
             )
         val getterText = getGetterCallText(nameService, extractedClass, identifier, method, currentClass, isParameter)
         if (getterText == null) {
+            println ("WARNING: getter text is null")
             return
         }
         val getterCall = JavaPsiFacade.getElementFactory(method.project).createExpressionFromText(
@@ -181,6 +185,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
 
 
         if (isOnLeftSideOfAssignemt(identifier)) {
+            commitAll(project)
             WriteCommandAction.runWriteCommandAction(project) {
                 var setterCall = JavaPsiFacade.getElementFactory(method.project).createExpressionFromText(
                     "${objectName}.${
@@ -213,11 +218,14 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
             handlePostfixPrefixOperation(identifier, extractedClass, nameService)
         } else {
             val parent = identifier.parent
+            println("parent ${parent.text}")
+            commitAll(project)
+
             WriteCommandAction.runWriteCommandAction(project) {
                 identifier.lastChild.replace(getterCall)
                 if(identifier.nextSibling!=null && (identifier.nextSibling.text=="," || identifier.nextSibling.text==".")){
 
-                method.addAfter( PsiParserFacade.getInstance(project).createWhiteSpaceFromText("\n"),identifier.nextSibling)
+               // method.addAfter( PsiParserFacade.getInstance(project).createWhiteSpaceFromText("\n"),identifier.nextSibling)
                 }
             }
 
@@ -237,8 +245,11 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         fieldName: String
     ) {
         val field = element as PsiField
+        println("field definition ${field.text}")
+
         val containingClass = field.getParentOfType<PsiClass>(true)
         if (containingClass == null) {
+            println("No containing class found")
             return
         }
         val type = JavaPsiFacade.getElementFactory(project).createType(extractedClass)
@@ -322,18 +333,30 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         element: PsiElement,
         method: PsiMethod,
         nameService: IdentifierNameService,
-        variableNames: Array<String>
+        variableNames: Array<String>,
+        allMethodParameters: List<String>
     ) {
 
         val exprList = element.getParentOfType<PsiMethodCallExpression>(true)!!
-        if(exprList.argumentList.expressions.size!=variableNames.size){
+       
+        
+        println("method usage ${exprList.text}")
+        if(exprList.text.contains("${extractedClass.name}(")){
+            println("already updated")
             return
         }
-        println("method " + method.name)
+        else{
+            println("not updated")
+        }
+        if(exprList.argumentList.expressions.size<variableNames.size){
+            println("WARNING: argument count mismatch")
+            return
+        }
         val containingMethod = element.getParentOfType<PsiMethod>(true)!!
         val constructor =
             extractedClass.constructors.firstOrNull { it.parameterList.parameters.size == variableNames.size }
         if (constructor == null) {
+            println("WARNING: No fitting constructor found")
             println(variableNames.joinToString(","))
             println(extractedClass.constructors.map { it.parameterList.parameters.size })
             println(exprList.text)
@@ -344,12 +367,33 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
 
         val argsInOrder = Array<String>(variableNames.size) { "" }
         val argsToDelete = mutableSetOf<Int>()
+        var doesHaveVarArgs=false
         for (variableName in variableNames) {
-            val paramPos = variableNames.indexOfFirst { it == variableName }
+            val paramPos = allMethodParameters.indexOfFirst { it == variableName }
+            if(paramPos==allMethodParameters.size-1 && exprList.argumentList.expressions.size>variableNames.size){
+                doesHaveVarArgs=true
+            }
+            println("param pos $paramPos $variableName ${allMethodParameters.joinToString(",")}")
+            if(paramPos==-1){
+                println("WARNING: parameter not found $variableName ${method.parameterList.text}")
+                continue
+            }
             val constructorParamPos = constructor.parameterList.parameters.indexOfFirst { it.name == variableName }
+            println(exprList.text)
+            println(paramPos)
+            println(allMethodParameters.joinToString(","))
             argsInOrder[constructorParamPos] = exprList.argumentList.expressions[paramPos].text
             argsToDelete.add(paramPos)
 
+        }
+        if(doesHaveVarArgs){
+            argsInOrder[argsInOrder.size-1]=exprList.argumentList.expressions.toList().subList(exprList.argumentList.expressions.size-(exprList.argumentList.expressions.size-allMethodParameters.size)-1,exprList.argumentList.expressions.size).map{it.text}.joinToString(",")
+            var counter=exprList.argumentList.expressions.size-1
+            for (i in 0..(exprList.argumentList.expressions.size-allMethodParameters.size)){
+                argsToDelete.add(counter)
+                counter--
+            }
+            
         }
         val insertionPos =
             method.parameterList.parameters.indexOfFirst { it.type.canonicalText == extractedClass.qualifiedName }
@@ -359,8 +403,11 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         val whiteSpace=if(tooLong)"\n" else ""
         println("too long ${statement.length} $tooLong $statement")
         var newExpr = JavaPsiFacade.getElementFactory(project)
-            .createStatementFromText("new ${extractedClass.qualifiedName}($whiteSpace${argsInOrder.joinToString(",$whiteSpace")})", exprList)
-        /*if (containingMethod.parameterList.parameters[insertionPos].type.canonicalText == extractedClass.qualifiedName) {
+            .createExpressionFromText("new ${extractedClass.qualifiedName}($whiteSpace${argsInOrder.joinToString(",$whiteSpace")})", exprList)
+        val otherParameters=variableNames.toSet().minus( containingMethod.parameterList.parameters.map{it.name}.toSet())
+        println("other parameters ${otherParameters.joinToString(",")} ${allMethodParameters.joinToString(",")}" )
+        if (otherParameters.none()|| containingMethod.parameterList.parameters.any{it.name==nameService.getParameterName(extractedClass.name!!,containingMethod)}) {
+            println("INFO!!!: constructor has parameter of type ${extractedClass.qualifiedName}")
             val paramName = nameService.getParameterName(extractedClass.name!!, containingMethod)
             val name =
                 if (containingMethod.parameterList.parameters.any { it.name == paramName }) paramName else nameService.getFieldName(
@@ -368,7 +415,8 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                     containingMethod.getParentOfType<PsiClass>(true)
                 )
             newExpr = JavaPsiFacade.getElementFactory(project).createExpressionFromText(name, containingMethod)
-        }*/
+        }
+     
         WriteCommandAction.runWriteCommandAction(project) {
 
             var counter = 0
@@ -384,8 +432,11 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                 exprList.argumentList.add(newExpr)
 
             } else {
+                val insertionPos=if(insertionPos==-1)exprList.argumentList.expressions.size-1
+                else if(insertionPos==0) 0
+                else insertionPos-1
                 //exprList.argumentList.expressions[insertionPos-1].replace(newExpr)
-                exprList.argumentList.addAfter(newExpr, exprList.argumentList.expressions[insertionPos - 1])
+                exprList.argumentList.addAfter(newExpr, exprList.argumentList.expressions[insertionPos ])
             }
             optimizeCode(project,exprList)
             commitAll(project)
@@ -397,7 +448,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
     private fun optimizeCode(project: Project, element: PsiElement) {
         JavaCodeStyleManager.getInstance(project).shortenClassReferences(element!!)
         CodeStyleManager.getInstance(project).reformat(element.containingFile)
-        JavaCodeStyleManager.getInstance(project).optimizeImports(element.containingFile)
+        //JavaCodeStyleManager.getInstance(project).optimizeImports(element.containingFile)
 
     }
 
@@ -450,6 +501,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                 }
 
             }
+            val allParams=overridingMethod.parameterList.parameters.map { it.name }
             val overridingMethodUsages = refFinder.findMethodUsages(overridingMethod)
             updateMethodSignature(
                 project,
@@ -467,8 +519,9 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                     element,
                     overridingMethod,
                     nameService,
-                    relevantParameters.toTypedArray()
-                )
+                    relevantParameters.toTypedArray(),
+                    allParams                
+                    )
             }
         }
     }
@@ -484,6 +537,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
 
         val man = VirtualFileManager.getInstance()
         val vFile = man.findFileByUrl(ep.filePath)!!
+        println("curr file "+ep.filePath)
         vFile.refresh(false, true)
         val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
         val nameService = PrimitiveNameService(StubNameValidityChecker())
@@ -495,6 +549,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         }
 
         if (dataClumpClass == null) {
+            println("No class found")
             nop()
         }
         val targetPackageName = dataClumpFile.packageName
@@ -508,6 +563,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                 calculateOffset(dataClumpFile.text, ep.position.startLine, ep.position.startColumn)
             )
             if (data == null) {
+                println("No data found parameters")
                 return false
             }
             /*if(data._3.any{ PsiTypesUtil.getPsiClass(it.type)==null && it.type !is PsiPrimitiveType}){
@@ -517,11 +573,14 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
             val extractedClass =
                 classCreator.getOrCreateClass(project,suggestedClassName,ep.dataClumpKey, dataClumpFile, data._3, nameService)
             val method = data._1
-
+            val methodParameters=method.parameterList.parameters.map { it.name }
             val methodUsages = refFinder.findMethodUsages(method)
             handleOverridingMethods(method, relevantParameters, extractedClass, nameService, refFinder)
             for (param in method.parameterList.parameters) {
-                if (param.name !in relevantParameters) continue
+                if (param.name !in relevantParameters) {
+                    println("ignore  parameter ${param.name}")
+                    continue
+                }
                 val references = sortReferencesByDepth(refFinder.findParameterUsages(param))
                 for (element in references) {
                     updateVariableUsage(project, extractedClass, element, nameService, true)
@@ -538,7 +597,8 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
                     element,
                     method,
                     nameService,
-                    relevantParameters.toTypedArray()
+                    relevantParameters.toTypedArray(),
+                    methodParameters
                 )
             }
 
@@ -549,6 +609,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         } else if (dataClumpType == DATA_CLUMP_TYPE_FIELDS) {
             val data = getFieldsToRefactor(dataClumpClass, relevantParameters)
             if(data.none()){
+                println("fields No data found  ${dataClumpClass.name} ${relevantParameters}")
                 return false
             }
             if(data.any{ PsiTypesUtil.getPsiClass(it.type)==null && it.type !is PsiPrimitiveType}){
@@ -560,7 +621,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
             for (field in data) {
                 if (field.name !in relevantParameters) continue
                 val fieldUsages = refFinder.findFieldUsages(field)
-
+                println("looking at field ${field.text} in class " + dataClumpClass.name)
                 for (ref in fieldUsages) {
                     val element = ref
                     updateVariableUsage(project, extractedClass, element, nameService, false)

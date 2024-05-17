@@ -158,13 +158,16 @@ class ManualJavaClassCreator(paramNameClassMap :Map<String,String>? ) : ClassCre
         return File(parentDir, newFileName).path
     }
     fun nop(){}
-    private  fun getTypeText(variable: PsiVariable, isParameter:Boolean):String{
+    private  fun getTypeText(variable: PsiVariable, isParameter:Boolean, isLast:Boolean):String{
         val type=PsiTypesUtil.getPsiClass(variable.type)
         //val javaSdk = JavaSdk.getInstance()
         //java.nio.file.Files.writeString(Path.of("/home/compf/data/log_types"),"${variable.type.canonicalText} % ${variable.type.javaClass} ${type?.qualifiedName}\n",java.nio.file.StandardOpenOption.APPEND)
         var text= if(type!=null) type.qualifiedName!! else variable.type.canonicalText!!
         if(!isParameter){
             text=text.replace("...","[]")
+        }
+        if(isParameter && isLast){
+            text=text.replace("[]","...")
         }
         return text
     }
@@ -185,15 +188,15 @@ class ManualJavaClassCreator(paramNameClassMap :Map<String,String>? ) : ClassCre
         for (variable in relevantVariables) {
             val type=PsiTypesUtil.getPsiClass(variable.type)
             println("extractled class "+ variable.name + " "+variable.type.canonicalText)
-            text+="\tprivate ${getTypeText(variable,false)} ${variable.name};\n\n"
+            text+="\tprivate ${getTypeText(variable,false,false)} ${variable.name};\n\n"
             val getterName = nameService.getGetterName(variable.name!!)
-            text+="\tpublic ${getTypeText(variable,false)} ${getterName}(){\n\t\treturn ${variable.name};\n\t}\n\n"
+            text+="\tpublic ${getTypeText(variable,false,false)} ${getterName}(){\n\t\treturn ${variable.name};\n\t}\n\n"
             val setterName = nameService.getSetterName(variable.name!!)
-            text+="\tpublic void ${setterName}(${getTypeText(variable,true)} ${variable.name}){\n\t\tthis.${variable.name}=${variable.name};\n\t}\n\n"
+            text+="\tpublic void ${setterName}(${getTypeText(variable,true,false)} ${variable.name}){\n\t\tthis.${variable.name}=${variable.name};\n\t}\n\n"
         }
         // constructor
         text+="\tpublic ${className}("
-       text+= relevantVariables.joinToString(",") { "${getTypeText(it,true)} ${it.name}" }
+       text+= relevantVariables.joinToString(",") { "${getTypeText(it,true,relevantVariables.indexOf(it)==relevantVariables.size-1)} ${it.name}" }
         text+="){\n"
         for (variable in relevantVariables) {
             text+="\t\tthis.${variable.name}=${variable.name};\n"

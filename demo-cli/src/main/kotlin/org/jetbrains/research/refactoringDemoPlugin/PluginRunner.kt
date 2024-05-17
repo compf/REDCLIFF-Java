@@ -195,7 +195,9 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
                         val count = dataClumpContextData.dataClumps!!.data_clumps!!.size.toDouble()
                         val data_clumps =
                             dataClumpContextData.dataClumps!!.data_clumps.values.sortedByDescending { it.data_clump_data.size }
-                        for (value in data_clumps) {
+                        println("Size of data clumps ${data_clumps.size}")
+                            for (value in data_clumps) 
+                            {
                             this.dataClumpContextData.usageFinder!!.updateDataClumpKey(value.key)
                             println("Starting refactor ${value.key}")
                             refactorer.refactorDataClump(
@@ -211,7 +213,7 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
                             println(counter / count * 100)
 
 
-
+                            }
 
                         println("### saving")
                         println("### exiting")
@@ -221,7 +223,7 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
                 }
 
             }
-        }
+        
 
         class OpenProjectWithResolveLoader : ProjectLoader {
             override fun loadProject(path: Path, executor: PluginExecutor): Unit {
