@@ -336,8 +336,13 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         variableNames: Array<String>,
         allMethodParameters: List<String>
     ) {
-
-        val exprList = element.getParentOfType<PsiMethodCallExpression>(true)!!
+        println(element.text)
+        val nullableExprList = element.getParentOfType<PsiMethodCallExpression>(true)
+        if(nullableExprList==null){
+            println("WARNING: no method call found")
+            return
+        }
+        val exprList = nullableExprList!!
        
         
         println("method usage ${exprList.text}")
@@ -447,7 +452,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
 
     private fun optimizeCode(project: Project, element: PsiElement) {
         JavaCodeStyleManager.getInstance(project).shortenClassReferences(element!!)
-        CodeStyleManager.getInstance(project).reformat(element.containingFile)
+        //CodeStyleManager.getInstance(project).reformat(element.containingFile)
         //JavaCodeStyleManager.getInstance(project).optimizeImports(element.containingFile)
 
     }

@@ -94,9 +94,9 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
     fun initialize(project: Project,projectPath:File) {
         if (dataClumpContextPath != null) {
             val json = java.nio.file.Files.readString(Path.of(dataClumpContextPath))
-            val typeToken = genericType<Array<DataClumpsTypeContext>>()
-            val context = Gson().fromJson<Array<DataClumpsTypeContext>>(json, typeToken)
-            this.dataClumps = context[context.size - 1]
+            val typeToken = genericType<DataClumpsTypeContext>()
+            val context = Gson().fromJson<DataClumpsTypeContext>(json, typeToken)
+            this.dataClumps = context
         } else {
             val finder = DataClumpFinder(project)
             this.dataClumps = finder.run()
@@ -173,6 +173,16 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
 
         interface ProjectLoader {
             fun loadProject(path: Path, executor: PluginExecutor): Unit
+        }
+        fun getLoader(loaderName:String):ProjectLoader{
+            return when(loaderName){
+                "OpenProjectWithResolveLoader"->OpenProjectWithResolveLoader()
+                "OpenSingleProjectLoader"->OpenSingleProjectLoader()
+                "OpenProjectLoader"->OpenProjectLoader()
+                "OpenOrImportProjectLoader"->OpenOrImportProjectLoader()
+                "LoadAndOpenProjectLoader"->LoadAndOpenProjectLoader()
+                else->OpenProjectWithResolveLoader()
+            }
         }
 
         class PluginExecutor(val myProjectPath: File, val contextPath: Path, val availableContexts: Int) {
