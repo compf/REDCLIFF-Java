@@ -82,16 +82,24 @@ class DataClumpFinderRunner :CliktCommand(){
 }
 inline fun <reified T> genericType() = object: TypeToken<T>() {}.type
 enum class RefactorMode{
-    None,Manual,Automatic
+    None,Manual,Automatic,FindUsages
 }
-class DataClumpContextData(val dataClumpContextPath:String?,val referenceFindingContextePath:String?,val classNamesContextPath:String?,val extractedClassContextsPath:String?,val refactorMode:String?) {
+class DataClumpContextData(
+    val dataClumpContextPath:String?,
+    val referenceFindingContextePath:String?,
+    val classNamesContextPath:String?,
+    val extractedClassContextsPath:String?,
+    val refactorMode:String?,
+    val loaderName: String?
+
+) {
     var dataClumps: DataClumpsTypeContext? = null
     var usageFinder: ReferenceFinder? = null
     var classNames: Map<String, String>? = null
     var classCreator: ClassCreator? = null
     var refactorer:dataClumpRefactoring.DataClumpRefactorer?=null
 
-    fun initialize(project: Project,projectPath:File) {
+    fun initialize(project: Project,projectPath:File,dataPath:String) {
         if (dataClumpContextPath != null) {
             val json = java.nio.file.Files.readString(Path.of(dataClumpContextPath))
             val typeToken = genericType<DataClumpsTypeContext>()
@@ -129,6 +137,12 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
         else{ if(refactorMode==RefactorMode.Automatic.name){
             this.refactorer=dataClumpRefactoring.DataClumpRefactorer(projectPath)
         }
+            else if(refactorMode==RefactorMode.FindUsages.name){
+                val serializer=UsageSerializer()
+            serializer.run(project,this.dataClumps!!,dataPath)
+            this.refactorer= NoRefactoringRunner(projectPath,this.classCreator!!)
+            }
+
             else {
                 this.refactorer= NoRefactoringRunner(projectPath,this.classCreator!!)
             }
@@ -185,21 +199,15 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
             }
         }
 
-        class PluginExecutor(val myProjectPath: File, val contextPath: Path, val availableContexts: Int) {
-            var dataClumpContextData = DataClumpContextData(null, null, null, null,null)
+        class PluginExecutor(val myProjectPath: File, val contextPath: Path, val dataClumpContextData: DataClumpContextData) {
 
-            init {
-                dataClumpContextData =
-                    Gson().fromJson(java.nio.file.Files.readString(contextPath), DataClumpContextData::class.java)
-            }
+
 
 
             fun executePlugin(project: Project) {
                 ApplicationManager.getApplication().invokeAndWait() {
 
-                        val dataClumpContextData = this.dataClumpContextData
-                        dataClumpContextData.initialize(project, myProjectPath)
-
+                    dataClumpContextData.initialize(project, myProjectPath, contextPath.toString())
                     val refactorer = dataClumpContextData.refactorer!!
                         var counter = 0
                         val count = dataClumpContextData.dataClumps!!.data_clumps!!.size.toDouble()
@@ -349,22 +357,6 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
 
 
 
-        fun decodeToInt(value: String): Int {
-            var base = 10
-            val trimmed = value
-            if (value.startsWith("0x")) {
-                base = 16
-                trimmed.substring(2)
-            } else if (value.startsWith("0b")) {
-                base = 2
-                trimmed.substring(2)
-            } else if (value.startsWith("0")) {
-                base = 8
-                trimmed.substring(1)
-            }
-            return Integer.parseInt(trimmed, base)
-        }
-
         override fun run() {
             println("### starting refactor")
 
@@ -372,15 +364,25 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
             val projectManager = ProjectManagerEx.getInstanceEx()
             //projectManager.loadProject()
             // projectManager.closeAndDisposeAllProjects(true)
+            val DefaultLoaderName="OpenProjectWithResolveLoader"
+            val contextPath=dataPath!!.toPath()
+            try{
+                val dataClumpContextData=Gson().fromJson(java.nio.file.Files.readString(contextPath),DataClumpContextData::class.java)
 
-
-            val opener = OpenProjectWithResolveLoader()
+            }
+            catch (e:Exception){
+                println("### error")
+                println(e)
+                throw e
+            }
+            val dataClumpContextData=Gson().fromJson(java.nio.file.Files.readString(contextPath),DataClumpContextData::class.java)
+            val loaderName=dataClumpContextData.loaderName?:DefaultLoaderName
+            val loader=getLoader(loaderName)
             print("init")
             var project: Project? = null
             try {
-                val availableContext = availableContexts?.let { decodeToInt(it) } ?: Int.MAX_VALUE
-                val executor = PluginExecutor(myProjectPath, dataPath!!.toPath(), availableContext)
-                opener.loadProject(myProjectPath.toPath(), executor)
+                val executor = PluginExecutor(myProjectPath, dataPath!!.toPath(), dataClumpContextData)
+                loader.loadProject(myProjectPath.toPath(), executor)
             } catch (e: Exception) {
                 println("### error")
                 e.printStackTrace()
@@ -392,15 +394,4 @@ class DataClumpContextData(val dataClumpContextPath:String?,val referenceFinding
             exitProcess(0)
         }
     }
-}
-fun addJdk(project: Project, jdkPath: String): Sdk? {
-    val javaSdk = JavaSdk.getInstance()
-        val projectJdkTable = ProjectJdkTable.getInstance()
-    val newSdk=javaSdk.createJdk("hello","/home/compf/data/jdks/jdk-17.0.2",false)
-        projectJdkTable.addJdk(newSdk,project)
-    val projectRootManager = ProjectRootManager.getInstance(project)
-    projectRootManager.projectSdk = newSdk
-
-
-    return null
 }

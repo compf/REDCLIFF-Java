@@ -1,5 +1,6 @@
 package dataClumpRefactoring
 
+import com.google.gson.Gson
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.*
@@ -12,8 +13,11 @@ import com.intellij.psi.util.elementType
 import org.jetbrains.kotlin.idea.search.usagesSearch.searchReferencesOrMethodReferences
 import org.jetbrains.kotlin.psi.psiUtil.findDescendantOfType
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
+import org.jetbrains.kotlin.psi.psiUtil.getPrevSiblingIgnoringWhitespace
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.research.refactoringDemoPlugin.util.extractKotlinAndJavaClasses
+import java.nio.file.Path
+
 interface ReferenceFinder {
 
     fun findFieldUsages(field: PsiField): List<PsiElement>
@@ -96,7 +100,18 @@ class FullReferenceFinder : ReferenceFinder {
     }
 }
 
+fun getElementByPosition(project:Project,path:String, pos:Position):PsiElement{
+    val fullPath="file://" + java.nio.file.Paths.get(project.basePath!!, path).toString()
+    println(fullPath)
+    val man = VirtualFileManager.getInstance()
+    val vFile = man.findFileByUrl(fullPath)!!
 
+    var file=PsiManager.getInstance(project).findFile(vFile)!!
+    val document=PsiDocumentManager.getInstance(project).getDocument(file)!!
+    val startOffset=document.getLineStartOffset(pos.startLine)+pos.startColumn
+    val endOffset=document.getLineStartOffset(pos.endLine)+pos.endColumn
+    return file.findElementAt(startOffset)!!.getParentOfType<PsiElement>(false)!!
+}
 class UsageInfoBasedFinder (val project:Project,val usagesMap:Map<String,Iterable<UsageInfo>>): ReferenceFinder {
     private var usageMapElementa=mutableMapOf<String,Iterable<PsiElement>>()
     private var  usageElements:Iterable<PsiElement> =emptyList<PsiElement>()
@@ -104,21 +119,10 @@ class UsageInfoBasedFinder (val project:Project,val usagesMap:Map<String,Iterabl
     init {
 
         for((key,value) in usagesMap){
-            usageMapElementa[key]=value.map { getElementByPosition(it.filePath,it.range) }
+            usageMapElementa[key]=value.map { getElementByPosition(project,it.filePath,it.range) }
         }
     }
-    fun getElementByPosition(path:String, pos:Position):PsiElement{
-        val fullPath="file://" + java.nio.file.Paths.get(project.basePath!!, path).toString()
-        println(fullPath)
-        val man = VirtualFileManager.getInstance()
-        val vFile = man.findFileByUrl(fullPath)!!
 
-        var file=PsiManager.getInstance(project).findFile(vFile)!!
-        val document=PsiDocumentManager.getInstance(project).getDocument(file)!!
-        val startOffset=document.getLineStartOffset(pos.startLine)+pos.startColumn
-        val endOffset=document.getLineStartOffset(pos.endLine)+pos.endColumn
-        return file.findElementAt(startOffset)!!.getParentOfType<PsiElement>(false)!!
-    }
 
     override fun updateDataClumpKey(dcKey: String) {
         println(dcKey)
@@ -191,4 +195,76 @@ class UsageInfoBasedFinder (val project:Project,val usagesMap:Map<String,Iterabl
         return result
     }
 
+}
+class UsageSerializer{
+    fun correctElement(element:PsiElement):PsiElement?{
+        if(element is PsiParameter || element is PsiField){
+            return element
+        }
+
+        val asParam=element.getParentOfType<PsiParameter>(true)
+        if (asParam!=null){
+            return asParam
+        }
+        val asField=element.getParentOfType<PsiField>(true)
+        if (asField!=null){
+            return asField
+        }
+        val leftSibling=element.getPrevSiblingIgnoringWhitespace(false)
+        if(leftSibling is PsiParameter || leftSibling is PsiField){
+            return leftSibling;
+        }
+        val rightSibling=element.nextSibling
+        if(rightSibling is PsiParameter || rightSibling is PsiField){
+            return rightSibling;
+        }
+        return null
+
+    }
+    val finder=PsiReferenceFinder()
+    fun run(project: Project,   dataClumps: DataClumpsTypeContext,dataPath:String){
+        val usages= mutableMapOf <String,MutableList<UsageInfo>>()
+        for(dataClump in dataClumps.data_clumps){
+            usages[dataClump.key]= mutableListOf()
+
+            for( dataClumpData in dataClump.value.data_clump_data){
+                val elements= arrayOf(
+                    getElementByPosition(project,dataClump.value.from_file_path,dataClumpData.value.position),
+                    getElementByPosition(project,dataClump.value.to_file_path,dataClumpData.value.to_variable.position)
+                )
+              for(ele in elements){
+                  val eleCorrected=correctElement(ele)
+                  if(eleCorrected==null){
+                      continue
+                  }
+                  val asParam=eleCorrected as? PsiParameter
+                    if (asParam!=null){
+                        val parameterUsages=finder.findParameterUsages(asParam)
+                        for(parameterUsage in parameterUsages){
+                            usages[dataClump.key]!!.add(UsageInfo(asParam.name!!,UsageInfo.UsageType.VariableUsed.ordinal,
+                                getPosition(parameterUsage),
+                                parameterUsage.containingFile.virtualFile.path,dataClumpData.key))
+
+                        }
+                  }
+                    val asField=eleCorrected as? PsiField
+                    if (asField!=null){
+                        val fieldUsages=finder.findFieldUsages(asField)
+                        for(fieldUsage in fieldUsages){
+                            usages[dataClump.key]!!.add(UsageInfo(asField.name!!,UsageInfo.UsageType.VariableUsed.ordinal,
+                                getPosition(fieldUsage),
+                                fieldUsage.containingFile.virtualFile.path,dataClumpData.key))
+
+                        }
+                    }
+              }
+            }
+
+
+
+        }
+        val parent=java.io.File(dataPath).parent
+
+        java.nio.file.Files.writeString(Path.of(parent,"usageFindingContext.json"),Gson().toJson(usages))
+    }
 }

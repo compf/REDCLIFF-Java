@@ -149,26 +149,111 @@ class PsiClassCreator(paramNameClassMap :Map<String,String>? ): ClassCreator(par
     }
 
 
+enum class MemberType{Fields,Getter,Setter,Constructor}
+enum class  ByMemberTypeOrVariableOrder{MemberTypeOrder,VariableOrder}
+val defaultMemberOrder= arrayOf(
+    MemberType.Fields,
+    MemberType.Getter,
+    MemberType.Setter,
+    MemberType.Constructor
 
-class ManualJavaClassCreator(paramNameClassMap :Map<String,String>? ) : ClassCreator(paramNameClassMap) {
+)
 
+ class MemberIterator(val variables: List<PsiVariable>, val memberOrder: Array<MemberType>, val order:ByMemberTypeOrVariableOrder) : Iterator<Pair<PsiVariable,MemberType>> {
+     var index1=0
+     var index2=0
+     val index1Max=if(order==ByMemberTypeOrVariableOrder.MemberTypeOrder) memberOrder.size else variables.size
+     val index2Max=if(order==ByMemberTypeOrVariableOrder.MemberTypeOrder) variables.size else memberOrder.size
+     override fun hasNext(): Boolean {
+
+         return index1<index1Max && index2<index2Max
+     }
+     fun handleConstructor(){
+         if(order==ByMemberTypeOrVariableOrder.MemberTypeOrder){
+             index1++
+         }
+         else{
+             index2++
+         }
+     }
+
+     override fun next(): Pair<PsiVariable, MemberType> {
+         val memberIndex = if (order == ByMemberTypeOrVariableOrder.MemberTypeOrder) index1 else index2
+         val variableIndex = if (order == ByMemberTypeOrVariableOrder.MemberTypeOrder) index2 else index1
+         val pair = Pair(variables[variableIndex], memberOrder[memberIndex])
+         if(memberOrder[memberIndex] == MemberType.Constructor) {
+             handleConstructor()
+         }
+         else{
+             index2++
+             if (index2 >= index2Max) {
+                 index2 = 0
+                 index1++
+             }
+         }
+
+            return pair
+     }
+
+
+
+
+ }
+class ManualJavaClassCreator(paramNameClassMap :Map<String,String>?, val memberOrder:Array<MemberType> =defaultMemberOrder ) : ClassCreator(paramNameClassMap) {
     fun replaceFileName(originalPath: String, newFileName: String): String {
         val originalFile = File(originalPath)
         val parentDir = originalFile.parent
         return File(parentDir, newFileName).path
     }
     fun nop(){}
-    private  fun getTypeText(variable: PsiVariable, isParameter:Boolean, isLast:Boolean):String{
+    private  fun getTypeText(variable: PsiVariable, typePosKindInfo:TypePositionAndKind):String{
         val type=PsiTypesUtil.getPsiClass(variable.type)
         //val javaSdk = JavaSdk.getInstance()
         //java.nio.file.Files.writeString(Path.of("/home/compf/data/log_types"),"${variable.type.canonicalText} % ${variable.type.javaClass} ${type?.qualifiedName}\n",java.nio.file.StandardOpenOption.APPEND)
         var text= if(type!=null) type.qualifiedName!! else variable.type.canonicalText!!
-        if(!isParameter){
+        if(typePosKindInfo==TypePositionAndKind.NoParameter){
             text=text.replace("...","[]")
         }
-        if(isParameter && isLast){
+        if(typePosKindInfo==TypePositionAndKind.ParameterLast){
             text=text.replace("[]","...")
         }
+        return text
+    }
+    enum class TypePositionAndKind{
+        ParameterNotLast,ParameterLast,NoParameter
+    }
+    fun createByType(variable: PsiVariable, memberType: MemberType, nameService: IdentifierNameService, allVariables: List<PsiVariable>, className: String):String{
+        return when(memberType){
+            MemberType.Fields->createField(variable)
+            MemberType.Getter->createGetter(variable,nameService)
+            MemberType.Setter->createSetter(variable,nameService)
+            MemberType.Constructor->createConstructor(allVariables, className)
+        }
+    }
+    fun createField(variable: PsiVariable):String{
+        return "\tprivate ${variable.type.canonicalText} ${variable.name};\n"
+    }
+    fun createGetter(variable: PsiVariable, nameService: IdentifierNameService):String{
+        val getterName = nameService.getGetterName(variable.name!!)
+        val typeText=getTypeText(variable,TypePositionAndKind.NoParameter)
+        return "\tpublic $typeText ${getterName}() {\n\t\treturn ${variable.name};\n\t}\n"
+    }
+    fun createSetter(variable: PsiVariable, nameService: IdentifierNameService):String{
+        val setterName = nameService.getSetterName(variable.name!!)
+        val typeText=getTypeText(variable,TypePositionAndKind.ParameterLast)
+        return "\tpublic void ${setterName}($typeText ${variable.name}) {\n\t\tthis.${variable.name}=${variable.name};\n\t}\n"
+    }
+    fun createConstructor(relevantVariables: List<PsiVariable>, className: String):String{
+        var text="\tpublic $className\t("
+        text+= relevantVariables.joinToString(",") {
+            val typePosKindInfo=if(it==relevantVariables.last()) TypePositionAndKind.ParameterLast else TypePositionAndKind.ParameterNotLast
+             getTypeText(it,typePosKindInfo)+" "+it.name
+        }
+        text+="){\n"
+        for (variable in relevantVariables) {
+            text+="\t\tthis.${variable.name}\t=\t${variable.name};\n"
+        }
+        text+="}"
         return text
     }
     override fun createClass(
@@ -184,25 +269,13 @@ class ManualJavaClassCreator(paramNameClassMap :Map<String,String>? ) : ClassCre
         val fourWhitespce="    "
         val packageName =(dataClumpFile as PsiJavaFile).packageName
         var text="package ${packageName};\n"
-        text+="public class ${className}{\n"
-        for (variable in relevantVariables) {
-            val type=PsiTypesUtil.getPsiClass(variable.type)
-            println("extractled class "+ variable.name + " "+variable.type.canonicalText)
-            text+="\tprivate ${getTypeText(variable,false,false)} ${variable.name};\n\n"
-            val getterName = nameService.getGetterName(variable.name!!)
-            text+="\tpublic ${getTypeText(variable,false,false)} ${getterName}(){\n\t\treturn ${variable.name};\n\t}\n\n"
-            val setterName = nameService.getSetterName(variable.name!!)
-            text+="\tpublic void ${setterName}(${getTypeText(variable,true,false)} ${variable.name}){\n\t\tthis.${variable.name}=${variable.name};\n\t}\n\n"
+        text+="public class ${className} {\n"
+        val iterator=MemberIterator(relevantVariables,if(memberOrder.isEmpty()) defaultMemberOrder else memberOrder,ByMemberTypeOrVariableOrder.MemberTypeOrder)
+        while(iterator.hasNext()){
+            val (variable,memberType)=iterator.next()
+            text+="\n"+createByType(variable,memberType,nameService,relevantVariables,className)
         }
-        // constructor
-        text+="\tpublic ${className}("
-       text+= relevantVariables.joinToString(",") { "${getTypeText(it,true,relevantVariables.indexOf(it)==relevantVariables.size-1)} ${it.name}" }
-        text+="){\n"
-        for (variable in relevantVariables) {
-            text+="\t\tthis.${variable.name}=${variable.name};\n"
-        }
-        text+="\t}\n"
-        text+="}\n\n"
+        text+="\n}\n"
         text=text.replace("\t",fourWhitespce)
        val newPath=replaceFileName(dataClumpFile.containingFile.virtualFile.path,className+".java")
         java.nio.file.Files.writeString(Path.of(newPath),text)
