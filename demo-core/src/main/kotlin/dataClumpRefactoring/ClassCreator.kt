@@ -71,6 +71,9 @@ abstract class ClassCreator(dcKeyClassPathMap:Map<String,String>?) {
                              dataClumpFile: PsiFile,
                              relevantVariables: List<PsiVariable>,
                              nameService: IdentifierNameService):String
+   open fun createNameService():IdentifierNameService{
+        return PrimitiveNameService(StubNameValidityChecker())
+    }
 }
 class PsiClassCreator(paramNameClassMap :Map<String,String>? ): ClassCreator(paramNameClassMap){
     override fun createClass(project: Project,
@@ -199,26 +202,43 @@ val defaultMemberOrder= arrayOf(
 
 
  }
+private  fun getTypeText(variable: PsiVariable, typePosKindInfo: ManualJavaClassCreator.TypePositionAndKind):String{
+    val type=PsiTypesUtil.getPsiClass(variable.type)
+    //val javaSdk = JavaSdk.getInstance()
+    //java.nio.file.Files.writeString(Path.of("/home/compf/data/log_types"),"${variable.type.canonicalText} % ${variable.type.javaClass} ${type?.qualifiedName}\n",java.nio.file.StandardOpenOption.APPEND)
+    var text= if(type!=null) type.qualifiedName!! else variable.type.canonicalText!!
+    if(typePosKindInfo== ManualJavaClassCreator.TypePositionAndKind.NoParameter){
+        text=text.replace("...","[]")
+    }
+    if(typePosKindInfo== ManualJavaClassCreator.TypePositionAndKind.ParameterLast){
+        text=text.replace("[]","...")
+    }
+    return text
+}
+fun replaceFileName(originalPath: String, newFileName: String): String {
+    val originalFile = File(originalPath)
+    val parentDir = originalFile.parent
+    return File(parentDir, newFileName).path
+}
+fun getHeader(dataClumpFile: PsiFile):String{
+    val result= mutableListOf<String>()
+   val lines= java.nio.file.Files.readString(Path.of(dataClumpFile.virtualFile.path)).split("\n")
+    for(l in lines){
+        if(l.contains("*/")){
+            result.add(l)
+            break
+        }
+        else{
+            result.add(l)
+
+        }
+    }
+    return result.joinToString("\n")
+}
 class ManualJavaClassCreator(paramNameClassMap :Map<String,String>?, val memberOrder:Array<MemberType> =defaultMemberOrder ) : ClassCreator(paramNameClassMap) {
-    fun replaceFileName(originalPath: String, newFileName: String): String {
-        val originalFile = File(originalPath)
-        val parentDir = originalFile.parent
-        return File(parentDir, newFileName).path
-    }
+
     fun nop(){}
-    private  fun getTypeText(variable: PsiVariable, typePosKindInfo:TypePositionAndKind):String{
-        val type=PsiTypesUtil.getPsiClass(variable.type)
-        //val javaSdk = JavaSdk.getInstance()
-        //java.nio.file.Files.writeString(Path.of("/home/compf/data/log_types"),"${variable.type.canonicalText} % ${variable.type.javaClass} ${type?.qualifiedName}\n",java.nio.file.StandardOpenOption.APPEND)
-        var text= if(type!=null) type.qualifiedName!! else variable.type.canonicalText!!
-        if(typePosKindInfo==TypePositionAndKind.NoParameter){
-            text=text.replace("...","[]")
-        }
-        if(typePosKindInfo==TypePositionAndKind.ParameterLast){
-            text=text.replace("[]","...")
-        }
-        return text
-    }
+
     enum class TypePositionAndKind{
         ParameterNotLast,ParameterLast,NoParameter
     }
@@ -278,9 +298,33 @@ class ManualJavaClassCreator(paramNameClassMap :Map<String,String>?, val memberO
         text+="\n}\n"
         text=text.replace("\t",fourWhitespce)
        val newPath=replaceFileName(dataClumpFile.containingFile.virtualFile.path,className+".java")
-        java.nio.file.Files.writeString(Path.of(newPath),text)
+        java.nio.file.Files.writeString(Path.of(newPath), getHeader(dataClumpFile)+"\n"+ text)
       return  "file://"+newPath
 
+    }
+}
+
+class RecordCreator(dcKeyClassPathMap: Map<String, String>?) : ClassCreator(dcKeyClassPathMap){
+    override fun createClass(project: Project,
+                             className: String,
+                             dataClumpFile: PsiFile,
+                             relevantVariables: List<PsiVariable>,
+                             nameService: IdentifierNameService):String {
+        val packageName =(dataClumpFile as PsiJavaFile).packageName
+        var text="package ${packageName};\n"
+        text+="public record ${className}(\n"
+        text+= relevantVariables.joinToString(",\n") {
+            "${getTypeText(it,ManualJavaClassCreator.TypePositionAndKind.NoParameter)} ${it.name}"
+        }
+        text+="){\n"
+
+        text+="}\n"
+        val newPath=replaceFileName(dataClumpFile.containingFile.virtualFile.path,className+".java")
+        java.nio.file.Files.writeString(Path.of(newPath), getHeader(dataClumpFile)+"\n"+ text)
+        return  "file://"+newPath
+    }
+    override fun createNameService():IdentifierNameService{
+        return  RecordPrimitiveNameService(StubNameValidityChecker())
     }
 }
 

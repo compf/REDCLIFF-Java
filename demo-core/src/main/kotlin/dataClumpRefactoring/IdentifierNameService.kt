@@ -23,7 +23,7 @@ interface IdentifierNameService {
 
     fun getNameValidityChecker():NameValidityChecker
 }
-class PrimitiveNameService(private val validityChecker: NameValidityChecker):IdentifierNameService{
+open class PrimitiveNameService(private val validityChecker: NameValidityChecker):IdentifierNameService{
     override fun getGetterName(variableName: String): String {
       return "get${variableName.replaceFirstChar { it.uppercase() }}"
     }
@@ -45,4 +45,15 @@ class PrimitiveNameService(private val validityChecker: NameValidityChecker):Ide
     }
 
 
+}
+
+class RecordPrimitiveNameService(private val validityChecker: NameValidityChecker):PrimitiveNameService(validityChecker){
+    override fun getGetterName(variableName: String): String {
+        return variableName
+      }
+      override fun getSetterName(variableName: String): String {
+        throw Exception("Not possible")
+    }
+
+  
 }

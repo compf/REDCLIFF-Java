@@ -408,7 +408,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         val whiteSpace=if(tooLong)"\n" else ""
         println("too long ${statement.length} $tooLong $statement")
         var newExpr = JavaPsiFacade.getElementFactory(project)
-            .createExpressionFromText("new ${extractedClass.qualifiedName}($whiteSpace${argsInOrder.joinToString(",$whiteSpace")})", exprList)
+            .createExpressionFromText("new ${extractedClass.name}($whiteSpace${argsInOrder.joinToString(",$whiteSpace")})", exprList)
         val otherParameters=variableNames.toSet().minus( containingMethod.parameterList.parameters.map{it.name}.toSet())
         println("other parameters ${otherParameters.joinToString(",")} ${allMethodParameters.joinToString(",")}" )
         if (otherParameters.none()|| containingMethod.parameterList.parameters.any{it.name==nameService.getParameterName(extractedClass.name!!,containingMethod)}) {
@@ -537,7 +537,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         suggestedClassName: String,
         classProbablyExisting: Boolean,
         ep: DataClumpEndpoint,
-        relevantParameters: Set<String>
+        relevantParameters: Set<String>,
     ): Boolean {
 
         val man = VirtualFileManager.getInstance()
@@ -545,7 +545,7 @@ class ManualDataClumpRefactorer(private val projectPath: File,val refFinder: Ref
         println("curr file "+ep.filePath)
         vFile.refresh(false, true)
         val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
-        val nameService = PrimitiveNameService(StubNameValidityChecker())
+        val nameService =this.classCreator.createNameService()
 
 
         val dataClumpClass = findClassRec((dataClumpFile as PsiClassOwner).classes, ep.className!!)
