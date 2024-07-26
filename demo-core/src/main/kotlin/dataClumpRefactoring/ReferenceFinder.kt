@@ -226,6 +226,7 @@ class UsageSerializer{
         val usages= mutableMapOf <String,MutableList<UsageInfo>>()
         for(dataClump in dataClumps.data_clumps){
             usages[dataClump.key]= mutableListOf()
+            var firstDataClump=true
 
             for( dataClumpData in dataClump.value.data_clump_data){
                 val elements= arrayOf(
@@ -246,7 +247,16 @@ class UsageSerializer{
                                 parameterUsage.containingFile.virtualFile.path,dataClumpData.key))
 
                         }
+                    val asMethod=asParam.getParentOfType<PsiMethod>(true)!!
+                    val methodUsages=finder.findMethodUsages(asMethod)
+                       for(methodUsage in methodUsages){
+                            usages[dataClump.key]!!.add(UsageInfo(asMethod.name!!,UsageInfo.UsageType.MethodUsed.ordinal,
+                                getPosition(methodUsage),
+                                methodUsage.containingFile.virtualFile.path,dataClumpData.key))
+
+                        }
                   }
+                  firstDataClump=false
                     val asField=eleCorrected as? PsiField
                     if (asField!=null){
                         val fieldUsages=finder.findFieldUsages(asField)
@@ -265,6 +275,6 @@ class UsageSerializer{
         }
         val parent=java.io.File(dataPath).parent
 
-        java.nio.file.Files.writeString(Path.of(parent,"usageFindingContext.json"),Gson().toJson(usages))
+        java.nio.file.Files.writeString(Path.of(dataPath),Gson().toJson(usages))
     }
 }
