@@ -17,6 +17,7 @@ import org.jetbrains.kotlin.psi.psiUtil.getPrevSiblingIgnoringWhitespace
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.research.refactoringDemoPlugin.util.extractKotlinAndJavaClasses
 import java.nio.file.Path
+import java.nio.file.Paths
 
 interface ReferenceFinder {
 

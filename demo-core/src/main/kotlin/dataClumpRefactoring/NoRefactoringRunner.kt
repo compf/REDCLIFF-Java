@@ -6,7 +6,7 @@ import com.intellij.psi.PsiClassOwner
 import com.intellij.psi.PsiManager
 import java.io.File
 
-class NoRefactoringRunner(projectPath: File, val classCreator: ClassCreator):DataClumpRefactorer(projectPath){
+class NoRefactoringRunner(projectPath: File):DataClumpRefactorer(projectPath){
     override fun refactorDataClumpEndpoint(
         dataClumpType: String,
         project: Project,
@@ -26,7 +26,6 @@ class NoRefactoringRunner(projectPath: File, val classCreator: ClassCreator):Dat
         if(variables==null){
             return false
         }
-        classCreator.getOrCreateClass(project, suggestedClassName,ep.dataClumpKey, dataClumpFile, variables,nameService)
         return true
     }
 }

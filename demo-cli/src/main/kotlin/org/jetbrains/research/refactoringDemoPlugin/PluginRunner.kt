@@ -125,12 +125,14 @@ class DataClumpContextData(
         } else {
             this.classNames = generatePrimitiveClassNames(this.dataClumps!!.data_clumps)
         }
-        if (extractedClassContextsPath != null && refactorMode==RefactorMode.FindUsages) {
-            val json = java.nio.file.Files.readString(Path.of(extractedClassContextsPath))
-            val context = Gson().fromJson<Map<String, String>>(json, Map::class.java)
-            this.classCreator = ManualJavaClassCreator(context)
-        } else {
-            this.classCreator = ManualJavaClassCreator(null)
+        if(refactorMode!=RefactorMode.FindUsages.name) {
+            if (extractedClassContextsPath != null) {
+                val json = java.nio.file.Files.readString(Path.of(extractedClassContextsPath))
+                val context = Gson().fromJson<Map<String, String>>(json, Map::class.java)
+                this.classCreator = ManualJavaClassCreator(context)
+            } else {
+                this.classCreator = ManualJavaClassCreator(null)
+            }
         }
         if(refactorMode==RefactorMode.Manual.name){
             this.refactorer=ManualDataClumpRefactorer(projectPath ,this.usageFinder!!,this.classCreator!!)
@@ -141,11 +143,11 @@ class DataClumpContextData(
             else if(refactorMode==RefactorMode.FindUsages.name){
                 val serializer=UsageSerializer()
             serializer.run(project,this.dataClumps!!,referenceFindingContextePath!!)
-            this.refactorer= NoRefactoringRunner(projectPath,this.classCreator!!)
+            this.refactorer= NoRefactoringRunner(projectPath)
             }
 
             else {
-                this.refactorer= NoRefactoringRunner(projectPath,this.classCreator!!)
+                this.refactorer= NoRefactoringRunner(projectPath)
             }
 
         }
