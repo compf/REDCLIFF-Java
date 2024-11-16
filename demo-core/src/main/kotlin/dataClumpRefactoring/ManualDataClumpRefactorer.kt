@@ -15,10 +15,10 @@ import java.io.File
 
 
 class ManualDataClumpRefactorer(
-    private val projectPath: File,
+    private val project: Project,
     val refFinder: ReferenceFinder,
     val classCreator: ClassCreator
-) : DataClumpRefactorer(projectPath) {
+) : DataClumpRefactorer(project) {
 
     fun updateDocComment(
         method: PsiMethod,

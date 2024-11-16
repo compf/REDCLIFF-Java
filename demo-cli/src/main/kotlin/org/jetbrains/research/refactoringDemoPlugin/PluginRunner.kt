@@ -138,16 +138,16 @@ class DataClumpContextData(
             }
         }
         if (refactorMode == RefactorMode.Manual.name) {
-            this.refactorer = ManualDataClumpRefactorer(projectPath, this.usageFinder!!, this.classCreator!!)
+            this.refactorer = ManualDataClumpRefactorer(project, this.usageFinder!!, this.classCreator!!)
         } else {
             if (refactorMode == RefactorMode.Automatic.name) {
-                this.refactorer = dataClumpRefactoring.DataClumpRefactorer(projectPath)
+                this.refactorer = dataClumpRefactoring.DataClumpRefactorer(project)
             } else if (refactorMode == RefactorMode.FindUsages.name) {
                 val serializer = UsageSerializer()
                 serializer.run(project, this.dataClumps!!, referenceFindingContextePath!!)
-                this.refactorer = NoRefactoringRunner(projectPath)
+                this.refactorer = NoRefactoringRunner(project)
             } else {
-                this.refactorer = NoRefactoringRunner(projectPath)
+                this.refactorer = NoRefactoringRunner(project)
             }
 
         }

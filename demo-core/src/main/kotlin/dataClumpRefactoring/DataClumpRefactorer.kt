@@ -28,10 +28,10 @@ import kotlin.io.path.Path
 
 class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String,val dataClumpKey:String, val position: Position) {}
 
-open class DataClumpRefactorer(private val projectPath:File) {
+open class DataClumpRefactorer(private val project: Project) {
     fun getURI(path: String): String? {
         try {
-            return "file://" + java.nio.file.Paths.get(projectPath.toPath().toString(), path).toString()
+            return "file://" + java.nio.file.Paths.get(project.basePath.toString(), path).toString()
         } catch (e: Exception) {
             println("Error while creating path")
             println(e)
@@ -172,7 +172,7 @@ open class DataClumpRefactorer(private val projectPath:File) {
         }
         return fields.toList()
     }
-    protected open fun refactorDataClumpEndpoint(dataClumpType:String, project: Project, suggestedClassName: String, classProbablyExisting:Boolean, ep:DataClumpEndpoint, relevantParameters:Set<String>): Boolean {
+     open fun refactorDataClumpEndpoint(dataClumpType:String, project: Project, suggestedClassName: String, classProbablyExisting:Boolean, ep:DataClumpEndpoint, relevantParameters:Set<String>): Boolean {
         val man = VirtualFileManager.getInstance()
         val vFile = man.findFileByUrl(ep.filePath)!!
         val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!

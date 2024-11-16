@@ -6,7 +6,7 @@ import com.intellij.psi.PsiClassOwner
 import com.intellij.psi.PsiManager
 import java.io.File
 
-class NoRefactoringRunner(projectPath: File):DataClumpRefactorer(projectPath){
+class NoRefactoringRunner(project: Project):DataClumpRefactorer(project){
     override fun refactorDataClumpEndpoint(
         dataClumpType: String,
         project: Project,
