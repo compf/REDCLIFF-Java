@@ -222,18 +222,21 @@ fun replaceFileName(originalPath: String, newFileName: String): String {
 }
 fun getHeader(dataClumpFile: PsiFile):String{
     val result= mutableListOf<String>()
-   val lines= java.nio.file.Files.readString(Path.of(dataClumpFile.virtualFile.path)).split("\n")
-    for(l in lines){
-        if(l.contains("*/")){
-            result.add(l)
-            break
-        }
-        else{
-            result.add(l)
-
-        }
+   val lines= java.nio.file.Files.readString(Path.of(dataClumpFile.virtualFile.path)).split("\n").filter { it.trim()!="" }
+    if(!lines[0].startsWith("/*")){
+        return ""
     }
-    return result.joinToString("\n")
+    else{
+        val lastIndex=lines.indexOfFirst { it.contains("*/") }
+        if(lastIndex==-1){
+            return ""
+        }
+        for(i in 0..lastIndex){
+            result.add(lines[i])
+        }
+        return result.joinToString("\n")
+    }
+
 }
 class ManualJavaClassCreator(paramNameClassMap :Map<String,String>?, val memberOrder:Array<MemberType> =defaultMemberOrder ) : ClassCreator(paramNameClassMap) {
 

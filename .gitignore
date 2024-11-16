@@ -1,5 +1,7 @@
 /.gradle
 /build
+demo-core/bin
+demo-cli/bin
 /.idea
 
 .DS_Store
