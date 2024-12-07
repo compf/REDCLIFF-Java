@@ -4,13 +4,9 @@ import com.intellij.ide.fileTemplates.JavaTemplateUtil
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.projectRoots.JavaSdk
 import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.openapi.vfs.newvfs.RefreshQueue
 import com.intellij.psi.*
-import com.intellij.psi.impl.source.PsiClassReferenceType
 import com.intellij.psi.util.PsiTypesUtil
-import org.jetbrains.kotlin.idea.core.script.ucache.relativeName
 import java.io.File
 import java.nio.file.Path
 
@@ -28,7 +24,7 @@ abstract class ClassCreator(dcKeyClassPathMap:Map<String,String>?) {
     }
     fun loadClass(project: Project,path: String):PsiClass? {
         val man = VirtualFileManager.getInstance()
-        val vFile = man.refreshAndFindFileByUrl(path!!)
+        val vFile = man.refreshAndFindFileByUrl(path)
         val file = PsiManager.getInstance(project).findFile(vFile!!)!!
 
 
@@ -142,12 +138,7 @@ class PsiClassCreator(paramNameClassMap :Map<String,String>? ): ClassCreator(par
             throw e
         }
 
-        /*ProjectUtils.waitForIndexing(project)
-        ProjectUtils.commitAll(project)
-        val session= RefreshQueue.getInstance().createSession(false,true){
 
-        }
-        session.launch()*/
     }
     }
 
@@ -204,9 +195,7 @@ val defaultMemberOrder= arrayOf(
  }
 private  fun getTypeText(variable: PsiVariable, typePosKindInfo: ManualJavaClassCreator.TypePositionAndKind):String{
     val type=PsiTypesUtil.getPsiClass(variable.type)
-    //val javaSdk = JavaSdk.getInstance()
-    //java.nio.file.Files.writeString(Path.of("/home/compf/data/log_types"),"${variable.type.canonicalText} % ${variable.type.javaClass} ${type?.qualifiedName}\n",java.nio.file.StandardOpenOption.APPEND)
-    var text= if(type!=null) type.qualifiedName!! else variable.type.canonicalText!!
+    var text= if(type!=null) type.qualifiedName!! else variable.type.canonicalText
     if(typePosKindInfo== ManualJavaClassCreator.TypePositionAndKind.NoParameter){
         text=text.replace("...","[]")
     }

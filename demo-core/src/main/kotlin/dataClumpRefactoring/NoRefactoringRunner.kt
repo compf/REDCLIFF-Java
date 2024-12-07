@@ -23,9 +23,6 @@ class NoRefactoringRunner(project: Project):DataClumpRefactorer(project){
         val dataClumpClass =findClassRec((dataClumpFile as PsiClassOwner).classes,ep.className)
         println(ep.filePath +" " + ep.className +" "+ep.methodName +" "+ep.position.startLine+" "+ep.position.startColumn +" "+ep.dataClumpType)
         val variables=if(ep.dataClumpType==DATA_CLUMP_TYPE_PARAMETERS) getMethodAndParamsToRefactor(dataClumpClass ,ep.methodName!!,relevantParameters,calculateOffset(dataClumpFile.text,ep.position.startLine,ep.position.startColumn))?._3 else  getFieldsToRefactor(dataClumpClass,relevantParameters)
-        if(variables==null){
-            return false
-        }
-        return true
+        return variables != null
     }
 }

@@ -24,7 +24,7 @@ fun buildKey(classKey: String?, methodKey: String?, varKey: String?): String {
 
 fun getPosition(element: PsiElement): Position {
 
-    val containingFile: PsiFile = element.getContainingFile()
+    val containingFile: PsiFile = element.containingFile
     val project = containingFile.project
     val psiDocumentManager = PsiDocumentManager.getInstance(project)
     val document = psiDocumentManager.getDocument(containingFile)!!
@@ -143,7 +143,7 @@ class DataClumpFinder(private val project: Project) {
     }
 
     private fun isTypeSimiliar(var1: PsiVariable, var2: PsiVariable): Boolean {
-        return var1.type == var2.type;
+        return var1.type == var2.type
     }
 
     fun checkDataClump(variables1: Array<PsiVariable>, variables2: Array<PsiVariable>): DataClumpFindingResult? {

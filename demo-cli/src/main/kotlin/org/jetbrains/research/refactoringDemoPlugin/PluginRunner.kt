@@ -2,55 +2,19 @@ package org.jetbrains.research.refactoringDemoPlugin
 
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.arguments.argument
-import com.github.ajalt.clikt.parameters.arguments.default
 import com.github.ajalt.clikt.parameters.arguments.optional
-import com.github.ajalt.clikt.parameters.options.option
-import com.github.ajalt.clikt.parameters.arguments.validate
-import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.types.file
-import com.github.ajalt.clikt.parameters.types.int
 import com.google.gson.Gson
-import com.google.gson.GsonBuilder
+import com.google.gson.reflect.TypeToken
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ApplicationStarter
-import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
-import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.psi.*
-import java.io.File
-import kotlin.system.exitProcess
-import org.jetbrains.research.pluginUtilities.openRepository.getKotlinJavaRepositoryOpener
-import org.jetbrains.research.refactoringDemoPlugin.util.extractElementsOfType
-import org.jetbrains.research.refactoringDemoPlugin.util.extractModules
-import org.jetbrains.research.refactoringDemoPlugin.util.findPsiFilesByExtension
-import com.intellij.refactoring.introduceParameterObject.*
-import com.intellij.openapi.vfs.newvfs.RefreshQueue
-import io.ktor.util.date.*
-import com.intellij.openapi.project.ex.ProjectManagerEx
-import com.google.gson.reflect.TypeToken
-import com.intellij.ide.impl.ProjectUtil
-import com.intellij.ide.impl.getTrustedState
-import com.intellij.openapi.application.ReadAction
-import com.intellij.openapi.components.stateStore
-import com.intellij.openapi.projectRoots.JavaSdk
-import com.intellij.openapi.projectRoots.ProjectJdkTable
-import com.intellij.openapi.projectRoots.Sdk
-import com.intellij.openapi.roots.ProjectRootManager
-import com.intellij.openapi.startup.StartupManager
-import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.psi.util.PsiTreeUtil
-import com.intellij.psi.util.PsiUtil
 import dataClumpRefactoring.*
-import javaslang.collection.TreeMap
-import org.jetbrains.kotlin.idea.base.util.allScope
-import org.jetbrains.kotlin.idea.codeInsight.shorten.ensureNoRefactoringRequestsBeforeRefactoring
-import org.jetbrains.research.refactoringDemoPlugin.util.getAllRelevantVariables
-import org.jetbrains.uast.evaluation.toConstant
+import java.io.File
 import java.nio.file.Path
-import java.security.MessageDigest
-import java.util.Base64
+import kotlin.system.exitProcess
 
 object PluginRunner : ApplicationStarter {
     @Deprecated("Specify it as `id` for extension definition in a plugin descriptor")
@@ -141,7 +105,7 @@ class DataClumpContextData(
             this.refactorer = ManualDataClumpRefactorer(project, this.usageFinder!!, this.classCreator!!)
         } else {
             if (refactorMode == RefactorMode.Automatic.name) {
-                this.refactorer = dataClumpRefactoring.DataClumpRefactorer(project)
+                this.refactorer = DataClumpRefactorer(project)
             } else if (refactorMode == RefactorMode.FindUsages.name) {
                 val serializer = UsageSerializer()
                 serializer.run(project, this.dataClumps!!, referenceFindingContextePath!!)
@@ -153,7 +117,7 @@ class DataClumpContextData(
         }
     }
 
-    private fun generatePrimitiveClassNames(dataClumps: Map<String, DataClumpTypeContext>): Map<String, String>? {
+    private fun generatePrimitiveClassNames(dataClumps: Map<String, DataClumpTypeContext>): Map<String, String> {
         val result = mutableMapOf<String, String>()
         for ((key, value) in dataClumps) {
             val className = value.data_clump_data.values.map {
@@ -187,7 +151,6 @@ class DataClumpContextData(
         //https://github.com/JetBrains/intellij-community/blob/cb1f19a78bb9a4db29b33ff186cdb60ceab7f64c/java/java-impl-refactorings/src/com/intellij/refactoring/encapsulateFields/JavaEncapsulateFieldHelper.java#L86
         private val dataPath by
         argument(help = "Path to the context data").file(mustExist = true, canBeFile = true).optional()
-        private val availableContexts by argument(help = "Integer that identifies which contexts are available").optional()
 
 
         class PluginExecutor(
@@ -198,12 +161,12 @@ class DataClumpContextData(
 
 
             fun executePlugin(project: Project) {
-                ApplicationManager.getApplication().invokeAndWait() {
+                ApplicationManager.getApplication().invokeAndWait {
 
                     dataClumpContextData.initialize(project, myProjectPath, contextPath.toString())
                     val refactorer = dataClumpContextData.refactorer!!
                     var counter = 0
-                    val count = dataClumpContextData.dataClumps!!.data_clumps!!.size.toDouble()
+                    val count = dataClumpContextData.dataClumps!!.data_clumps.size.toDouble()
                     val data_clumps =
                         dataClumpContextData.dataClumps!!.data_clumps.values.sortedByDescending { it.data_clump_data.size }
                     println("Size of data clumps ${data_clumps.size}")
@@ -240,14 +203,9 @@ class DataClumpContextData(
         override fun run() {
             println("### starting refactor")
 
-            //VirtualFileManager.getInstance().syncRefresh()
-            val projectManager = ProjectManagerEx.getInstanceEx()
-            //projectManager.loadProject()
-            // projectManager.closeAndDisposeAllProjects(true)
             val DefaultLoaderName = "OpenProjectWithResolveLoader"
             val contextPath = dataPath!!.toPath()
             try {
-                val dataClumpContextData =
                     Gson().fromJson(java.nio.file.Files.readString(contextPath), DataClumpContextData::class.java)
 
             } catch (e: Exception) {

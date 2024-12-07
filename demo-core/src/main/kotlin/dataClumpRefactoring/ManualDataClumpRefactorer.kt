@@ -4,14 +4,9 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.*
-import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.codeStyle.JavaCodeStyleManager
-import com.intellij.psi.impl.source.tree.PsiWhiteSpaceImpl
-import com.intellij.psi.util.PsiTypesUtil
 import com.intellij.psi.util.childrenOfType
-import com.intellij.refactoring.extractMethod.newImpl.ExtractMethodHelper.addSiblingAfter
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
-import java.io.File
 
 
 class ManualDataClumpRefactorer(
@@ -59,7 +54,7 @@ class ManualDataClumpRefactorer(
     ) {
         if (method.parameterList.parameters.none { it.name in relevantParameterNames }) {
             println("No relevant parameters found")
-            return;
+            return
         }
 
         val type = JavaPsiFacade.getElementFactory(method.project).createType(extractedClass)
@@ -168,7 +163,7 @@ class ManualDataClumpRefactorer(
         val method = identifier.getParentOfType<PsiMethod>(true)
         if (method == null) {
             println("WARNING: No method found")
-            return;
+            return
         }
         val currentClass = identifier.getParentOfType<PsiClass>(true)
         val objectName =
@@ -212,7 +207,6 @@ class ManualDataClumpRefactorer(
                 var newEle = identifier.lastChild as PsiElement
                 newEle = newEle.replace(setterCall)
                 assignmentExpression.replace(newEle.parent)
-                //(element.parent as PsiAssignmentExpression).rExpression?.replace(getterCall)
             }
         } else if (identifier.getParentOfType<PsiPostfixExpression>(true) != null || identifier.getParentOfType<PsiPostfixExpression>(
                 true
@@ -254,9 +248,9 @@ class ManualDataClumpRefactorer(
         val type = JavaPsiFacade.getElementFactory(project).createType(extractedClass)
         val extractedFieldName = nameService.getFieldName(extractedClass.name!!, containingClass)
         var extractedField =
-            containingClass!!.childrenOfType<PsiField>().firstOrNull() { it.name == extractedFieldName }
+            containingClass.childrenOfType<PsiField>().firstOrNull { it.name == extractedFieldName }
         val constructor =
-            extractedClass.constructors.firstOrNull() { it.parameterList.parameters.size == variableNames.size }
+            extractedClass.constructors.firstOrNull { it.parameterList.parameters.size == variableNames.size }
         if (constructor == null) {
             println(variableNames.joinToString(","))
             println(extractedClass.constructors.map { it.parameterList.parameters.size })
@@ -278,7 +272,7 @@ class ManualDataClumpRefactorer(
                 containingClass.add(extractedField!!)
             }
             extractedField =
-                containingClass!!.childrenOfType<PsiField>().firstOrNull() { it.name == extractedFieldName }
+                containingClass.childrenOfType<PsiField>().firstOrNull { it.name == extractedFieldName }
         }
         val constructorCall = extractedField!!.initializer as PsiCall
         val paramPos = constructor.parameterList.parameters.indexOfFirst { it.name == fieldName }
@@ -341,7 +335,7 @@ class ManualDataClumpRefactorer(
             println("WARNING: no method call found")
             return
         }
-        val exprList = nullableExprList!!
+        val exprList = nullableExprList
 
 
         println("method usage ${exprList.text}")
@@ -440,7 +434,6 @@ class ManualDataClumpRefactorer(
                 }
                 counter++
             }
-            println(" now" + exprList.toString())
             if (exprList.argumentList.expressionCount == 0) {
                 exprList.argumentList.add(newExpr)
 
@@ -448,7 +441,6 @@ class ManualDataClumpRefactorer(
                 val insertionPos = if (insertionPos == -1) exprList.argumentList.expressions.size - 1
                 else if (insertionPos == 0) 0
                 else insertionPos - 1
-                //exprList.argumentList.expressions[insertionPos-1].replace(newExpr)
                 exprList.argumentList.addAfter(newExpr, exprList.argumentList.expressions[insertionPos])
             }
             optimizeCode(project, exprList)
@@ -459,21 +451,14 @@ class ManualDataClumpRefactorer(
     }
 
     private fun optimizeCode(project: Project, element: PsiElement) {
-        JavaCodeStyleManager.getInstance(project).shortenClassReferences(element!!)
+        JavaCodeStyleManager.getInstance(project).shortenClassReferences(element)
         //CodeStyleManager.getInstance(project).reformat(element.containingFile)
         //JavaCodeStyleManager.getInstance(project).optimizeImports(element.containingFile)
 
     }
 
 
-    fun updateElementFromUsageInfo(
-        project: Project,
-        usageInfo: UsageInfo,
-        element: PsiElement,
-        nameService: IdentifierNameService
-    ) {
 
-    }
 
     fun nop() {
 
@@ -550,17 +535,12 @@ class ManualDataClumpRefactorer(
 
         val man = VirtualFileManager.getInstance()
         val vFile = man.findFileByUrl(ep.filePath)!!
-        println("curr file " + ep.filePath)
         vFile.refresh(false, true)
         val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
         val nameService = this.classCreator.createNameService()
 
 
-        val dataClumpClass = findClassRec((dataClumpFile as PsiClassOwner).classes, ep.className!!)
-        if (dataClumpClass!!.name == "sender_allowUnsafe_ess") {
-            throw Exception("SHould never happen")
-        }
-
+        val dataClumpClass = findClassRec((dataClumpFile as PsiClassOwner).classes, ep.className)
         if (dataClumpType == DATA_CLUMP_TYPE_PARAMETERS) {
 
             val data = getMethodAndParamsToRefactor(
@@ -570,18 +550,19 @@ class ManualDataClumpRefactorer(
                 calculateOffset(dataClumpFile.text, ep.position.startLine, ep.position.startColumn)
             )
             if (data == null) {
+                // happens if already refactored
                 println("No data found parameters")
                 return false
             }
 
             val extractedClass = classCreator.getOrCreateClass(
-                    project,
-                    suggestedClassName,
-                    ep.dataClumpKey,
-                    dataClumpFile,
-                    data._3,
-                    nameService
-                )
+                project,
+                suggestedClassName,
+                ep.dataClumpKey,
+                dataClumpFile,
+                data._3,
+                nameService
+            )
             val method = data._1
             val methodParameters = method.parameterList.parameters.map { it.name }
             val methodUsages = refFinder.findMethodUsages(method)
@@ -619,7 +600,7 @@ class ManualDataClumpRefactorer(
         } else if (dataClumpType == DATA_CLUMP_TYPE_FIELDS) {
             val data = getFieldsToRefactor(dataClumpClass, relevantParameters)
             if (data.none()) {
-                println("fields No data found  ${dataClumpClass.name} ${relevantParameters}")
+                println("fields No data found  ${dataClumpClass!!.name} ${relevantParameters}")
                 return false
             }
             val extractedClass =
@@ -634,7 +615,7 @@ class ManualDataClumpRefactorer(
             for (field in data) {
                 if (field.name !in relevantParameters) continue
                 val fieldUsages = refFinder.findFieldUsages(field)
-                println("looking at field ${field.text} in class " + dataClumpClass.name)
+                println("looking at field ${field.text} in class " + dataClumpClass!!.name)
                 for (ref in fieldUsages) {
                     val element = ref
                     updateVariableUsage(project, extractedClass, element, nameService, false)
@@ -645,7 +626,7 @@ class ManualDataClumpRefactorer(
                     extractedClass,
                     relevantParameters.toTypedArray(),
                     nameService,
-                    field.name!!
+                    field.name
                 )
 
             }

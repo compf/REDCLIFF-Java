@@ -1,32 +1,26 @@
 package dataClumpRefactoring
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.RefreshQueue
 import com.intellij.psi.*
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.changeSignature.ParameterInfoImpl
 import com.intellij.refactoring.extractclass.ExtractClassProcessor
 import com.intellij.refactoring.introduceParameterObject.IntroduceParameterObjectProcessor
 import com.intellij.refactoring.introduceparameterobject.JavaIntroduceParameterObjectClassDescriptor
-import com.intellij.refactoring.util.classMembers.MemberInfo
-import org.jetbrains.research.refactoringDemoPlugin.util.extractKotlinAndJavaClasses
-import java.io.File
-import com.intellij.openapi.project.DumbService
-import com.intellij.openapi.application.ApplicationManager
-import org.jetbrains.kotlin.lombok.utils.decapitalize
-import com.intellij.openapi.application.WriteAction
-import com.intellij.util.IncorrectOperationException
-import com.intellij.psi.impl.source.PsiParameterImpl;
-import javaslang.Tuple
 import javaslang.Tuple3
+import org.jetbrains.kotlin.lombok.utils.decapitalize
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
+import org.jetbrains.research.refactoringDemoPlugin.util.extractKotlinAndJavaClasses
 import kotlin.io.path.Path
 
-class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String,val dataClumpKey:String, val position: Position) {}
+class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String,val dataClumpKey:String, val position: Position)
 
 open class DataClumpRefactorer(private val project: Project) {
     fun getURI(path: String): String? {
@@ -38,8 +32,8 @@ open class DataClumpRefactorer(private val project: Project) {
             return null
         }
     }
-    public final val  DATA_CLUMP_TYPE_FIELDS="fields"
-    public final val DATA_CLUMP_TYPE_PARAMETERS="parameters"
+    val  DATA_CLUMP_TYPE_FIELDS="fields"
+    val DATA_CLUMP_TYPE_PARAMETERS="parameters"
     fun refactorDataClump(project:Project,suggestedNameWithDataClumpTypeContext: SuggestedNameWithDataClumpTypeContext){
         val context=suggestedNameWithDataClumpTypeContext.context
         val suggestedClassName=suggestedNameWithDataClumpTypeContext.suggestedName
@@ -67,7 +61,7 @@ open class DataClumpRefactorer(private val project: Project) {
         for (ep in endpoints) {
             if(!java.nio.file.Files.exists(Path((ep.filePath.replace("file://",""))))){
                 println("ignoring "+ep.filePath)
-                continue;
+                continue
             }
 
             loopedOnce=refactorDataClumpEndpoint(ep.dataClumpType,project, suggestedClassName,suggestedClassName in nameClassMap || loopedOnce ,ep,context.data_clump_data.values.map { it.name }.toSet())
@@ -82,7 +76,7 @@ open class DataClumpRefactorer(private val project: Project) {
         val lines = text.split('\n')
 
         for (i in 0 until lineNumber ) {
-            offset += lines[i].length+1;// Add 1 for the newline character
+            offset += lines[i].length+1// Add 1 for the newline character
         }
 
         return offset + columnNumber
@@ -90,9 +84,9 @@ open class DataClumpRefactorer(private val project: Project) {
     val nameClassMap= mutableMapOf<String,PsiClass>()
     fun getPackageName(file: PsiFile): String {
         if(file is PsiJavaFile){
-            return (file as PsiJavaFile).packageName
+            return file.packageName
         }
-        return "org/example";
+        return "org/example"
     }
     fun commit(project: Project,dir:VirtualFile){
         VfsUtil.markDirtyAndRefresh(true, true, true, dir)
@@ -147,13 +141,13 @@ open class DataClumpRefactorer(private val project: Project) {
         return null
     }
         val allParams=method.parameterList.parameters
-        var index = 0;
+        var index = 0
         val parameters=mutableListOf<PsiParameter>()
         val parameterInfos = mutableListOf<ParameterInfoImpl>()
         for (param in method.parameterList.parameters) {
             println(param.name)
             if (param.name in relevantParameters) {
-                parameterInfos.add(ParameterInfoImpl(index, param.name!!, param.type))
+                parameterInfos.add(ParameterInfoImpl(index, param.name, param.type))
                 parameters.add(param)
                 index++
 
@@ -195,8 +189,8 @@ open class DataClumpRefactorer(private val project: Project) {
             if(parameterInfos.size< MIN_SIZE_OF_DATA_CLUMP){
                 return false
             }
-            val descriptor:JavaIntroduceParameterObjectClassDescriptor;
-                if(classProbablyExisting){
+            val descriptor:JavaIntroduceParameterObjectClassDescriptor
+            if(classProbablyExisting){
                     descriptor=JavaKeepExistingClassIntroduceParameterObjectDescriptor(packageName,moveDestination,nameClassMap[suggestedClassName]!!,false,"public",parameterInfos.toTypedArray(),method,true)
                 }else{
                     descriptor= JavaIntroduceParameterObjectClassDescriptor(

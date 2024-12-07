@@ -16,10 +16,10 @@ class StubNameValidityChecker:NameValidityChecker{
     }
 }
 interface IdentifierNameService {
-    fun getGetterName( variableName: String):String;
-    fun getSetterName( variableName: String):String;
-    fun getParameterName(extractedClassName:String,method:PsiMethod):String;
-    fun getFieldName(extractedClassName: String, fieldHolderClass: PsiClass?):String;
+    fun getGetterName( variableName: String):String
+    fun getSetterName( variableName: String):String
+    fun getParameterName(extractedClassName:String,method:PsiMethod):String
+    fun getFieldName(extractedClassName: String, fieldHolderClass: PsiClass?):String
 
     fun getNameValidityChecker():NameValidityChecker
 }

@@ -102,7 +102,7 @@ class FullReferenceFinder : ReferenceFinder {
 }
 
 fun getElementByPosition(project:Project,path:String, pos:Position):PsiElement{
-    val fullPath="file://" + java.nio.file.Paths.get(project.basePath!!, path).toString()
+    val fullPath="file://" + Paths.get(project.basePath!!, path).toString()
     println(fullPath)
     val man = VirtualFileManager.getInstance()
     val vFile = man.findFileByUrl(fullPath)!!
@@ -213,11 +213,11 @@ class UsageSerializer{
         }
         val leftSibling=element.getPrevSiblingIgnoringWhitespace(false)
         if(leftSibling is PsiParameter || leftSibling is PsiField){
-            return leftSibling;
+            return leftSibling
         }
         val rightSibling=element.nextSibling
         if(rightSibling is PsiParameter || rightSibling is PsiField){
-            return rightSibling;
+            return rightSibling
         }
         return null
 
@@ -243,7 +243,8 @@ class UsageSerializer{
                     if (asParam!=null){
                         val parameterUsages=finder.findParameterUsages(asParam)
                         for(parameterUsage in parameterUsages){
-                            usages[dataClump.key]!!.add(UsageInfo(asParam.name!!,UsageInfo.UsageType.VariableUsed.ordinal,
+                            usages[dataClump.key]!!.add(UsageInfo(
+                                asParam.name,UsageInfo.UsageType.VariableUsed.ordinal,
                                 getPosition(parameterUsage),
                                 parameterUsage.containingFile.virtualFile.path,dataClumpData.key))
 
@@ -251,7 +252,8 @@ class UsageSerializer{
                     val asMethod=asParam.getParentOfType<PsiMethod>(true)!!
                     val methodUsages=finder.findMethodUsages(asMethod)
                        for(methodUsage in methodUsages){
-                            usages[dataClump.key]!!.add(UsageInfo(asMethod.name!!,UsageInfo.UsageType.MethodUsed.ordinal,
+                            usages[dataClump.key]!!.add(UsageInfo(
+                                asMethod.name,UsageInfo.UsageType.MethodUsed.ordinal,
                                 getPosition(methodUsage),
                                 methodUsage.containingFile.virtualFile.path,dataClumpData.key))
 
@@ -262,7 +264,8 @@ class UsageSerializer{
                     if (asField!=null){
                         val fieldUsages=finder.findFieldUsages(asField)
                         for(fieldUsage in fieldUsages){
-                            usages[dataClump.key]!!.add(UsageInfo(asField.name!!,UsageInfo.UsageType.VariableUsed.ordinal,
+                            usages[dataClump.key]!!.add(UsageInfo(
+                                asField.name,UsageInfo.UsageType.VariableUsed.ordinal,
                                 getPosition(fieldUsage),
                                 fieldUsage.containingFile.virtualFile.path,dataClumpData.key))
 

@@ -32,15 +32,15 @@ class KeepLocationMoveDestination: MoveDestination {
        return source.containingDirectory
     }
 
-    override fun verify(source: PsiFile?): String? {
+    override fun verify(source: PsiFile?): String {
         return ""
     }
 
-    override fun verify(source: PsiDirectory?): String? {
+    override fun verify(source: PsiDirectory?): String {
        return ""
     }
 
-    override fun verify(source: PsiPackage?): String? {
+    override fun verify(source: PsiPackage?): String {
        return ""
     }
 
