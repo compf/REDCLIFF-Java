@@ -8,16 +8,11 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.OverridingMethodsSearch
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
-import com.intellij.psi.util.PsiUtil
-import com.intellij.psi.util.elementType
-import org.jetbrains.kotlin.idea.search.usagesSearch.searchReferencesOrMethodReferences
-import org.jetbrains.kotlin.psi.psiUtil.findDescendantOfType
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 import org.jetbrains.kotlin.psi.psiUtil.getPrevSiblingIgnoringWhitespace
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.research.refactoringDemoPlugin.util.extractKotlinAndJavaClasses
 import java.nio.file.Path
-import java.nio.file.Paths
 
 interface ReferenceFinder {
 
@@ -102,7 +97,13 @@ class FullReferenceFinder : ReferenceFinder {
 }
 
 fun getElementByPosition(project:Project,path:String, pos:Position):PsiElement{
-    val fullPath="file://" + Paths.get(project.basePath!!, path).toString()
+    var fullPath=""
+    if(Path.of(path).isAbsolute){
+      fullPath="file://"+path
+    }
+    else{
+        fullPath="file://"+Path.of(project.basePath!!,path).toAbsolutePath().toString()
+    }
     println(fullPath)
     val man = VirtualFileManager.getInstance()
     val vFile = man.findFileByUrl(fullPath)!!
