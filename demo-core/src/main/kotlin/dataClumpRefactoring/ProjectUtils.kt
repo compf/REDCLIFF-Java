@@ -9,6 +9,9 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.PsiDocumentManager
 
+/**
+ * Util methods for committing changes in the project
+ */
 class ProjectUtils {
     companion object{
         fun commit(project: Project, dir: VirtualFile){

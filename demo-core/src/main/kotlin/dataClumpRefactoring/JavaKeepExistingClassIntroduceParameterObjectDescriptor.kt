@@ -6,6 +6,10 @@ import com.intellij.refactoring.MoveDestination
 import com.intellij.refactoring.changeSignature.ParameterInfoImpl
 import  com.intellij.refactoring.introduceparameterobject.JavaIntroduceParameterObjectClassDescriptor
 
+/**
+ * Used to allow the base DataClumpRefactoring to keep the existing class and introduce a parameter object,
+ * is a little bit hacky, but it works.
+ */
 class JavaKeepExistingClassIntroduceParameterObjectDescriptor(
     packageName: String?,
     moveDestination: MoveDestination?,

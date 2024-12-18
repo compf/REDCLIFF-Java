@@ -6,6 +6,9 @@ import com.intellij.psi.PsiClassOwner
 import com.intellij.psi.PsiManager
 import java.io.File
 
+/**
+ * Performs no refactoring, used for testing purposes.
+ */
 class NoRefactoringRunner(project: Project):DataClumpRefactorer(project){
     override fun refactorDataClumpEndpoint(
         dataClumpType: String,

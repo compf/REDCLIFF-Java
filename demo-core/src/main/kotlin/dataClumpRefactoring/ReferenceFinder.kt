@@ -14,13 +14,27 @@ import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.research.refactoringDemoPlugin.util.extractKotlinAndJavaClasses
 import java.nio.file.Path
 
+/**
+ * Interface to find references
+ */
 interface ReferenceFinder {
 
+    /**
+     * Find usages of a field
+     * @param field the field to find usages of
+     * @return a list of usages
+     */
     fun findFieldUsages(field: PsiField): List<PsiElement>
+
+    /**
+     * Find usages of a parameter
+     * @param parameter the parameter to find usages of
+     * @return a list of usages
+     */
     fun findParameterUsages(parameter:PsiParameter):List<PsiElement>
 
-   fun  findMethodUsages(method:PsiMethod):List<PsiElement>
-  fun  findMethodOverrides(method:PsiMethod):List<PsiMethod>
+    fun  findMethodUsages(method:PsiMethod):List<PsiElement>
+    fun  findMethodOverrides(method:PsiMethod):List<PsiMethod>
 
   fun updateDataClumpKey(dcKey:String){
 
@@ -30,6 +44,9 @@ interface ReferenceFinder {
 
 
 }
+/**
+ * Uses the PSI to find references
+ */
 class PsiReferenceFinder:ReferenceFinder
 {
     override fun findFieldUsages(field: PsiField): List<PsiElement> {
@@ -50,6 +67,10 @@ class PsiReferenceFinder:ReferenceFinder
     }
 
 }   
+
+/**
+ * Systematic search for references, is very slow
+ */
 class FullReferenceFinder : ReferenceFinder {
     override fun findFieldUsages(field: PsiField): List<PsiElement> {
         var relevantClasses: List<PsiClass>
@@ -114,6 +135,10 @@ fun getElementByPosition(project:Project,path:String, pos:Position):PsiElement{
     val endOffset=document.getLineStartOffset(pos.endLine)+pos.endColumn
     return file.findElementAt(startOffset)!!.getParentOfType<PsiElement>(false)!!
 }
+
+/**
+ * Uses the existing usage info to find references
+ */
 class UsageInfoBasedFinder (val project:Project,val usagesMap:Map<String,Iterable<UsageInfo>>): ReferenceFinder {
     private var usageMapElementa=mutableMapOf<String,Iterable<PsiElement>>()
     private var  usageElements:Iterable<PsiElement> =emptyList<PsiElement>()
@@ -198,7 +223,15 @@ class UsageInfoBasedFinder (val project:Project,val usagesMap:Map<String,Iterabl
     }
 
 }
+
+/**
+ * serialize usage into context
+ */
 class UsageSerializer{
+
+    /**
+     * find a neighboring element that is a parameter or a field
+     */
     fun correctElement(element:PsiElement):PsiElement?{
         if(element is PsiParameter || element is PsiField){
             return element

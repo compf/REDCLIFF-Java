@@ -1,5 +1,7 @@
 package dataClumpRefactoring
-
+/**
+ * Type definition for data clumps context
+ */
 data class DataClumpTypeContext(
     val type: String,
     val key: String,

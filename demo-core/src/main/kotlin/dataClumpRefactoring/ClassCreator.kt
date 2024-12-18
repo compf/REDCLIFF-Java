@@ -10,7 +10,9 @@ import com.intellij.psi.util.PsiTypesUtil
 import java.io.File
 import java.nio.file.Path
 
-
+/**
+ * Creates a class if it does not exist
+ */
 abstract class ClassCreator(dcKeyClassPathMap:Map<String,String>?) {
     val dataClumpKeyClassPathMap= mutableMapOf<String,String>()
     val dataClumpItemsClassPathMap= mutableMapOf<String,String>()
@@ -62,6 +64,15 @@ abstract class ClassCreator(dcKeyClassPathMap:Map<String,String>?) {
 
 
     }
+    /**
+     * creates a non-existing class
+     * @param project the project
+     * @param className the name of the class
+     * @param dataClumpFile the file containing the data clump
+     * @param relevantVariables the variables that are part of the data clump
+     * @param nameService the name service
+     * @return the path of the created class
+     */
     abstract fun createClass(project: Project,
                              className: String,
                              dataClumpFile: PsiFile,
@@ -71,6 +82,10 @@ abstract class ClassCreator(dcKeyClassPathMap:Map<String,String>?) {
         return PrimitiveNameService(StubNameValidityChecker())
     }
 }
+
+/**
+ * Use the PSI to create a class
+ */
 class PsiClassCreator(paramNameClassMap :Map<String,String>? ): ClassCreator(paramNameClassMap){
     override fun createClass(project: Project,
                              className: String,
@@ -144,7 +159,12 @@ class PsiClassCreator(paramNameClassMap :Map<String,String>? ): ClassCreator(par
 
 
 enum class MemberType{Fields,Getter,Setter,Constructor}
-enum class  ByMemberTypeOrVariableOrder{MemberTypeOrder,VariableOrder}
+enum class  ByMemberTypeOrVariableOrder{
+    /**First write all operations of a member, then the next (e.g. all getters first) */
+    MemberTypeOrder,
+    /** First write all operation for variable (e.g. getX, setX), then do this for the next variable */
+    VariableOrder
+}
 val defaultMemberOrder= arrayOf(
     MemberType.Fields,
     MemberType.Getter,
@@ -153,6 +173,10 @@ val defaultMemberOrder= arrayOf(
 
 )
 
+/**
+ * helps to iterate over the members of a class
+ * e.g. fields, getters, setters, constructors
+ */
  class MemberIterator(val variables: List<PsiVariable>, val memberOrder: Array<MemberType>, val order:ByMemberTypeOrVariableOrder) : Iterator<Pair<PsiVariable,MemberType>> {
      var index1=0
      var index2=0
@@ -227,6 +251,10 @@ fun getHeader(dataClumpFile: PsiFile):String{
     }
 
 }
+
+/**
+ * Manually creates a class using String concatenation
+ */
 class ManualJavaClassCreator(paramNameClassMap :Map<String,String>?, val memberOrder:Array<MemberType> =defaultMemberOrder ) : ClassCreator(paramNameClassMap) {
 
     fun nop(){}
@@ -296,6 +324,9 @@ class ManualJavaClassCreator(paramNameClassMap :Map<String,String>?, val memberO
     }
 }
 
+/**
+ * Creates a record instead of a class
+ */
 class RecordCreator(dcKeyClassPathMap: Map<String, String>?) : ClassCreator(dcKeyClassPathMap){
     override fun createClass(project: Project,
                              className: String,

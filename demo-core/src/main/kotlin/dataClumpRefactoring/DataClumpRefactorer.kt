@@ -21,7 +21,10 @@ import org.jetbrains.research.refactoringDemoPlugin.util.extractKotlinAndJavaCla
 import kotlin.io.path.Path
 
 class DataClumpEndpoint(val filePath: String, val className: String, val methodName: String?,val dataClumpType:String,val dataClumpKey:String, val position: Position)
-
+/**
+ * Peroforms the refactoring of a data clump via the tools provided by the PSI,
+ * but has many limitations and is not fully functional.
+ */
 open class DataClumpRefactorer(private val project: Project) {
     fun getURI(path: String): String? {
         try {

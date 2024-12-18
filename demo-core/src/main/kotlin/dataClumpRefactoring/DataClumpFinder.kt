@@ -38,7 +38,9 @@ fun getPosition(element: PsiElement): Position {
     )
 
 }
-
+/**
+ * This class is responsible for finding data clumps in the project.
+ */
 class DataClumpFinder(private val project: Project) {
 
     fun run(): DataClumpsTypeContext {

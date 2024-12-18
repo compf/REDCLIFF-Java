@@ -8,13 +8,20 @@ import com.intellij.psi.codeStyle.JavaCodeStyleManager
 import com.intellij.psi.util.childrenOfType
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 
-
+/**
+ * Refactors data clumps by extracting them into a new class In contrast to the base class, this
+ * works but is slower
+ */
 class ManualDataClumpRefactorer(
     private val project: Project,
     val refFinder: ReferenceFinder,
     val classCreator: ClassCreator
 ) : DataClumpRefactorer(project) {
 
+    /**
+    creates some simple comments,
+    LLM inclusion is not implemented as for now
+     */
     fun updateDocComment(
         method: PsiMethod,
         extractedClass: PsiClass,
@@ -31,18 +38,18 @@ class ManualDataClumpRefactorer(
                 }
                 val paramText = "The ${extractedClass.name} object"
                 docComment.add(
-                    JavaPsiFacade.getElementFactory(method.project).createDocTagFromText(
-                        "@param ${
+                    JavaPsiFacade.getElementFactory(method.project)
+                        .createDocTagFromText(
+                            "@param ${
                             nameService.getParameterName(
                                 extractedClass.name!!,
                                 method
                             )
                         } ${paramText}"
-                    )
+                        )
                 )
             }
         }
-
     }
 
     fun updateMethodSignature(
@@ -58,32 +65,26 @@ class ManualDataClumpRefactorer(
         }
 
         val type = JavaPsiFacade.getElementFactory(method.project).createType(extractedClass)
-        val parameter = JavaPsiFacade.getElementFactory(method.project)
-            .createParameter(nameService.getParameterName(extractedClass.name!!, method), type)
-        WriteCommandAction.runWriteCommandAction(project) {
-            method.parameterList.add(parameter)
-        }
+        val parameter =
+            JavaPsiFacade.getElementFactory(method.project)
+                .createParameter(nameService.getParameterName(extractedClass.name!!, method), type)
+        WriteCommandAction.runWriteCommandAction(project) { method.parameterList.add(parameter) }
         for (paramName in relevantParameterNames) {
             val param = method.parameterList.parameters.find { it.name == paramName }
             if (param != null) {
-                WriteCommandAction.runWriteCommandAction(project) {
-                    param.delete()
-                }
+                // delete data clump items
+                WriteCommandAction.runWriteCommandAction(project) { param.delete() }
             }
         }
         updateDocComment(method, extractedClass, nameService, relevantParameterNames.toSet())
-        WriteCommandAction.runWriteCommandAction(project) {
-            optimizeCode(project, method)
-
-        }
+        WriteCommandAction.runWriteCommandAction(project) { optimizeCode(project, method) }
 
         commitAll(project)
-
     }
 
     fun isOnLeftSideOfAssignemt(element: PsiElement): Boolean {
-        return element.parent is PsiAssignmentExpression && (element.parent as PsiAssignmentExpression).lExpression == element
-
+        return element.parent is PsiAssignmentExpression &&
+            (element.parent as PsiAssignmentExpression).lExpression == element
     }
 
     fun handlePostfixPrefixOperation(
@@ -95,13 +96,21 @@ class ManualDataClumpRefactorer(
         val expr = identifier.getParentOfType<PsiPostfixExpression>(true) ?: prefix
         val getterName = nameService.getGetterName(identifier.text!!)
         val setterName = nameService.getSetterName(identifier.text!!)
-        val objectName = nameService.getFieldName(extractedClass.name!!, identifier.getParentOfType<PsiClass>(true))
-
-        val command = "${objectName}.${setterName}(${objectName}.${getterName}()+1);/*TODO postfix/prefix replaced*/"
-        WriteCommandAction.runWriteCommandAction(identifier.project) {
-            expr!!.parent!!.replace(
-                JavaPsiFacade.getElementFactory(identifier.project).createStatementFromText(command, expr)
+        val objectName =
+            nameService.getFieldName(
+                extractedClass.name!!,
+                identifier.getParentOfType<PsiClass>(true)
             )
+
+        val command =
+            "${objectName}.${setterName}(${objectName}.${getterName}()+1);/*TODO postfix/prefix replaced*/"
+        WriteCommandAction.runWriteCommandAction(identifier.project) {
+            expr!!
+                .parent!!
+                .replace(
+                    JavaPsiFacade.getElementFactory(identifier.project)
+                        .createStatementFromText(command, expr)
+                )
         }
         commitAll(identifier.project)
     }
@@ -115,10 +124,19 @@ class ManualDataClumpRefactorer(
         currentClass: PsiClass?
     ): String {
         val assignmentExpression = identifier.getParentOfType<PsiAssignmentExpression>(true)!!
-        val operators = arrayOf("+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=")
+        val operators =
+            arrayOf("+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=")
         if (operators.any { it == assignmentExpression.operationSign.text }) {
+            // handle += etc
             val getterCall =
-                getGetterCallText(nameService, extractedClass, identifier, method, currentClass, isParameter)
+                getGetterCallText(
+                    nameService,
+                    extractedClass,
+                    identifier,
+                    method,
+                    currentClass,
+                    isParameter
+                )
             return "$getterCall ${
                 assignmentExpression.operationSign.text.substring(
                     0,
@@ -144,10 +162,8 @@ class ManualDataClumpRefactorer(
         val identifier = if (element is PsiIdentifier) element.text else element.lastChild.text
         val getterName = nameService.getGetterName(identifier)
         val objectName =
-            if (isParameter) nameService.getParameterName(extractedClass.name!!, method) else nameService.getFieldName(
-                extractedClass.name!!,
-                currentClass
-            )
+            if (isParameter) nameService.getParameterName(extractedClass.name!!, method)
+            else nameService.getFieldName(extractedClass.name!!, currentClass)
         return "${objectName}.${getterName}()"
     }
 
@@ -167,26 +183,32 @@ class ManualDataClumpRefactorer(
         }
         val currentClass = identifier.getParentOfType<PsiClass>(true)
         val objectName =
-            if (isParameter) nameService.getParameterName(extractedClass.name!!, method) else nameService.getFieldName(
-                extractedClass.name!!,
-                currentClass
+            if (isParameter) nameService.getParameterName(extractedClass.name!!, method)
+            else nameService.getFieldName(extractedClass.name!!, currentClass)
+        val getterText =
+            getGetterCallText(
+                nameService,
+                extractedClass,
+                identifier,
+                method,
+                currentClass,
+                isParameter
             )
-        val getterText = getGetterCallText(nameService, extractedClass, identifier, method, currentClass, isParameter)
         if (getterText == null) {
             println("WARNING: getter text is null")
             return
         }
-        val getterCall = JavaPsiFacade.getElementFactory(method.project).createExpressionFromText(
-            getterText,
-            method
-        )
-
+        val getterCall =
+            JavaPsiFacade.getElementFactory(method.project)
+                .createExpressionFromText(getterText, method)
 
         if (isOnLeftSideOfAssignemt(identifier)) {
             commitAll(project)
             WriteCommandAction.runWriteCommandAction(project) {
-                var setterCall = JavaPsiFacade.getElementFactory(method.project).createExpressionFromText(
-                    "${objectName}.${
+                var setterCall =
+                    JavaPsiFacade.getElementFactory(method.project)
+                        .createExpressionFromText(
+                            "${objectName}.${
                         nameService.getSetterName(
                             (if (identifier is PsiIdentifier) identifier.text else identifier.lastChild.text)!!
                         )
@@ -199,36 +221,31 @@ class ManualDataClumpRefactorer(
                             method,
                             currentClass
                         )
-                    })", method
+                    })",
+                            method
+                        )
 
-                )
-
-                val assignmentExpression = identifier.getParentOfType<PsiAssignmentExpression>(true)!!
+                val assignmentExpression =
+                    identifier.getParentOfType<PsiAssignmentExpression>(true)!!
                 var newEle = identifier.lastChild as PsiElement
                 newEle = newEle.replace(setterCall)
                 assignmentExpression.replace(newEle.parent)
             }
-        } else if (identifier.getParentOfType<PsiPostfixExpression>(true) != null || identifier.getParentOfType<PsiPostfixExpression>(
-                true
-            ) != null
+        } else if (
+            identifier.getParentOfType<PsiPostfixExpression>(true) != null ||
+                identifier.getParentOfType<PsiPostfixExpression>(true) != null
         ) {
             handlePostfixPrefixOperation(identifier, extractedClass, nameService)
         } else {
-            val parent = identifier.parent
             commitAll(project)
 
             WriteCommandAction.runWriteCommandAction(project) {
                 identifier.lastChild.replace(getterCall)
-                if (identifier.nextSibling != null && (identifier.nextSibling.text == "," || identifier.nextSibling.text == ".")) {
-                }
+               
             }
-
         }
         commitAll(project)
-
-
     }
-
 
     fun updateFieldDeclarations(
         project: Project,
@@ -250,35 +267,42 @@ class ManualDataClumpRefactorer(
         var extractedField =
             containingClass.childrenOfType<PsiField>().firstOrNull { it.name == extractedFieldName }
         val constructor =
-            extractedClass.constructors.firstOrNull { it.parameterList.parameters.size == variableNames.size }
+            extractedClass.constructors.firstOrNull {
+                it.parameterList.parameters.size == variableNames.size
+            }
         if (constructor == null) {
             println(variableNames.joinToString(","))
             println(extractedClass.constructors.map { it.parameterList.parameters.size })
             println(field.text)
             println(extractedClass.qualifiedName)
             throw Exception("No fitting constructor found")
-            return
         }
         if (extractedField == null) {
-            extractedField = JavaPsiFacade.getElementFactory(project).createField(extractedFieldName, type)
+            extractedField =
+                JavaPsiFacade.getElementFactory(project).createField(extractedFieldName, type)
 
-            extractedField.initializer = JavaPsiFacade.getElementFactory(project)
-                .createExpressionFromText(
-                    "new ${extractedClass.qualifiedName}(${
+            extractedField.initializer =
+                JavaPsiFacade.getElementFactory(project)
+                    .createExpressionFromText(
+                        "new ${extractedClass.qualifiedName}(${
                         Array(variableNames.size) { "null" }.joinToString(",")
-                    })", extractedField
-                )
+                    })",
+                        extractedField
+                    )
             WriteCommandAction.runWriteCommandAction(project) {
                 containingClass.add(extractedField!!)
             }
             extractedField =
-                containingClass.childrenOfType<PsiField>().firstOrNull { it.name == extractedFieldName }
+                containingClass.childrenOfType<PsiField>().firstOrNull {
+                    it.name == extractedFieldName
+                }
         }
         val constructorCall = extractedField!!.initializer as PsiCall
         val paramPos = constructor.parameterList.parameters.indexOfFirst { it.name == fieldName }
 
         val argValue =
-            if (field.initializer == null) getDefaultValueAsStringForType(field.type) else field.initializer!!.text
+            if (field.initializer == null) getDefaultValueAsStringForType(field.type)
+            else field.initializer!!.text
         WriteCommandAction.runWriteCommandAction(project) {
             extractedField.modifierList!!.setModifierProperty(
                 "protected",
@@ -288,9 +312,13 @@ class ManualDataClumpRefactorer(
                 "public",
                 field.modifierList!!.hasModifierProperty("public")
             )
-            constructorCall.argumentList!!.expressions[paramPos].replace(
-                JavaPsiFacade.getElementFactory(project).createExpressionFromText(argValue, field)
-            )
+            constructorCall.argumentList!!
+                .expressions[paramPos]
+                .replace(
+                    JavaPsiFacade.getElementFactory(project)
+                        .createExpressionFromText(argValue, field)
+                )
+            // comma separated fields
             if (field.nextSibling.text == ",") {
                 field.nextSibling.delete()
             }
@@ -299,26 +327,23 @@ class ManualDataClumpRefactorer(
 
             commitAll(project)
         }
-
-
     }
-
 
     fun getDefaultValueAsStringForType(type: PsiType): String {
-        val result = when (type.canonicalText) {
-            "int" -> "0"
-            "short" -> "0"
-            "long" -> "0L"
-            "float" -> "0.0f"
-            "double" -> "0.0"
-            "char" -> "'\\u0000'"
-            "byte" -> "0"
-            "boolean" -> "false"
-            else -> "null"
-        }
+        val result =
+            when (type.canonicalText) {
+                "int" -> "0"
+                "short" -> "0"
+                "long" -> "0L"
+                "float" -> "0.0f"
+                "double" -> "0.0"
+                "char" -> "'\\u0000'"
+                "byte" -> "0"
+                "boolean" -> "false"
+                else -> "null"
+            }
         return result
     }
-
 
     fun updateMethodUsage(
         project: Project,
@@ -337,7 +362,6 @@ class ManualDataClumpRefactorer(
         }
         val exprList = nullableExprList
 
-
         println("method usage ${exprList.text}")
         if (exprList.text.contains("${extractedClass.name}(")) {
             println("already updated")
@@ -351,7 +375,9 @@ class ManualDataClumpRefactorer(
         }
         val containingMethod = element.getParentOfType<PsiMethod>(true)!!
         val constructor =
-            extractedClass.constructors.firstOrNull { it.parameterList.parameters.size == variableNames.size }
+            extractedClass.constructors.firstOrNull {
+                it.parameterList.parameters.size == variableNames.size
+            }
         if (constructor == null) {
             println("WARNING: No fitting constructor found")
             println(variableNames.joinToString(","))
@@ -359,7 +385,6 @@ class ManualDataClumpRefactorer(
             println(exprList.text)
             println(extractedClass.qualifiedName)
             throw Exception("No fitting constructor found")
-            return
         }
 
         val argsInOrder = Array<String>(variableNames.size) { "" }
@@ -367,7 +392,10 @@ class ManualDataClumpRefactorer(
         var doesHaveVarArgs = false
         for (variableName in variableNames) {
             val paramPos = allMethodParameters.indexOfFirst { it == variableName }
-            if (paramPos == allMethodParameters.size - 1 && exprList.argumentList.expressions.size > variableNames.size) {
+            if (
+                paramPos == allMethodParameters.size - 1 &&
+                    exprList.argumentList.expressions.size > variableNames.size
+            ) {
                 doesHaveVarArgs = true
             }
             println("param pos $paramPos $variableName ${allMethodParameters.joinToString(",")}")
@@ -375,57 +403,73 @@ class ManualDataClumpRefactorer(
                 println("WARNING: parameter not found $variableName ${method.parameterList.text}")
                 continue
             }
-            val constructorParamPos = constructor.parameterList.parameters.indexOfFirst { it.name == variableName }
+            val constructorParamPos =
+                constructor.parameterList.parameters.indexOfFirst { it.name == variableName }
             println(exprList.text)
             println(paramPos)
             println(allMethodParameters.joinToString(","))
             argsInOrder[constructorParamPos] = exprList.argumentList.expressions[paramPos].text
             argsToDelete.add(paramPos)
-
         }
         if (doesHaveVarArgs) {
-            argsInOrder[argsInOrder.size - 1] = exprList.argumentList.expressions.toList().subList(
-                exprList.argumentList.expressions.size - (exprList.argumentList.expressions.size - allMethodParameters.size) - 1,
-                exprList.argumentList.expressions.size
-            ).map { it.text }.joinToString(",")
+            argsInOrder[argsInOrder.size - 1] =
+                exprList.argumentList.expressions
+                    .toList()
+                    .subList(
+                        exprList.argumentList.expressions.size -
+                            (exprList.argumentList.expressions.size - allMethodParameters.size) -
+                            1,
+                        exprList.argumentList.expressions.size
+                    )
+                    .map { it.text }
+                    .joinToString(",")
             var counter = exprList.argumentList.expressions.size - 1
             for (i in 0..(exprList.argumentList.expressions.size - allMethodParameters.size)) {
                 argsToDelete.add(counter)
                 counter--
             }
-
         }
         val insertionPos =
-            method.parameterList.parameters.indexOfFirst { it.type.canonicalText == extractedClass.qualifiedName }
+            method.parameterList.parameters.indexOfFirst {
+                it.type.canonicalText == extractedClass.qualifiedName
+            }
         val MAX_LINE_LENGTH = 90
         val statement = exprList.getParentOfType<PsiStatement>(true)!!.text
         val tooLong = statement.length > MAX_LINE_LENGTH
+        // introduce new line if line becomes too long
         val whiteSpace = if (tooLong) "\n" else ""
         println("too long ${statement.length} $tooLong $statement")
-        var newExpr = JavaPsiFacade.getElementFactory(project)
-            .createExpressionFromText(
-                "new ${extractedClass.name}($whiteSpace${argsInOrder.joinToString(",$whiteSpace")})",
-                exprList
-            )
-        val otherParameters =
-            variableNames.toSet().minus(containingMethod.parameterList.parameters.map { it.name }.toSet())
-        if (otherParameters.none() || containingMethod.parameterList.parameters.any {
-                it.name == nameService.getParameterName(
-                    extractedClass.name!!,
-                    containingMethod
+        var newExpr =
+            JavaPsiFacade.getElementFactory(project)
+                .createExpressionFromText(
+                    "new ${extractedClass.name}($whiteSpace${argsInOrder.joinToString(",$whiteSpace")})",
+                    exprList
                 )
-            }) {
+        val otherParameters =
+            variableNames
+                .toSet()
+                .minus(containingMethod.parameterList.parameters.map { it.name }.toSet())
+        if (
+            otherParameters.none() ||
+                containingMethod.parameterList.parameters.any {
+                    it.name == nameService.getParameterName(extractedClass.name!!, containingMethod)
+                }
+        ) {
             val paramName = nameService.getParameterName(extractedClass.name!!, containingMethod)
             val name =
-                if (containingMethod.parameterList.parameters.any { it.name == paramName }) paramName else nameService.getFieldName(
-                    extractedClass.name!!,
-                    containingMethod.getParentOfType<PsiClass>(true)
-                )
-            newExpr = JavaPsiFacade.getElementFactory(project).createExpressionFromText(name, containingMethod)
+                if (containingMethod.parameterList.parameters.any { it.name == paramName })
+                    paramName
+                else
+                    nameService.getFieldName(
+                        extractedClass.name!!,
+                        containingMethod.getParentOfType<PsiClass>(true)
+                    )
+            newExpr =
+                JavaPsiFacade.getElementFactory(project)
+                    .createExpressionFromText(name, containingMethod)
         }
 
         WriteCommandAction.runWriteCommandAction(project) {
-
             var counter = 0
             for (arg in exprList.argumentList.expressions) {
                 if (counter in argsToDelete) {
@@ -434,36 +478,31 @@ class ManualDataClumpRefactorer(
                 }
                 counter++
             }
+            // insert new expression at right location
             if (exprList.argumentList.expressionCount == 0) {
                 exprList.argumentList.add(newExpr)
-
             } else {
-                val insertionPos = if (insertionPos == -1) exprList.argumentList.expressions.size - 1
-                else if (insertionPos == 0) 0
-                else insertionPos - 1
-                exprList.argumentList.addAfter(newExpr, exprList.argumentList.expressions[insertionPos])
+                val insertionPos =
+                    if (insertionPos == -1) exprList.argumentList.expressions.size - 1
+                    else if (insertionPos == 0) 0 else insertionPos - 1
+                exprList.argumentList.addAfter(
+                    newExpr,
+                    exprList.argumentList.expressions[insertionPos]
+                )
             }
             optimizeCode(project, exprList)
             commitAll(project)
         }
-
-
     }
 
     private fun optimizeCode(project: Project, element: PsiElement) {
         JavaCodeStyleManager.getInstance(project).shortenClassReferences(element)
-        //CodeStyleManager.getInstance(project).reformat(element.containingFile)
-        //JavaCodeStyleManager.getInstance(project).optimizeImports(element.containingFile)
+        // CodeStyleManager.getInstance(project).reformat(element.containingFile)
+        // JavaCodeStyleManager.getInstance(project).optimizeImports(element.containingFile)
 
     }
 
-
-
-
-    fun nop() {
-
-    }
-
+    fun nop() {}
 
     fun calcDepth(element: PsiElement): Int {
         var depth = 0
@@ -495,9 +534,14 @@ class ManualDataClumpRefactorer(
                 val references = sortReferencesByDepth(refFinder.findParameterUsages(param))
                 for (element in references) {
 
-                    updateVariableUsage(overridingMethod.project, extractedClass, element, nameService, true)
+                    updateVariableUsage(
+                        overridingMethod.project,
+                        extractedClass,
+                        element,
+                        nameService,
+                        true
+                    )
                 }
-
             }
             val allParams = overridingMethod.parameterList.parameters.map { it.name }
             val overridingMethodUsages = refFinder.findMethodUsages(overridingMethod)
@@ -539,34 +583,45 @@ class ManualDataClumpRefactorer(
         val dataClumpFile = PsiManager.getInstance(project).findFile(vFile)!!
         val nameService = this.classCreator.createNameService()
 
-
         val dataClumpClass = findClassRec((dataClumpFile as PsiClassOwner).classes, ep.className)
         if (dataClumpType == DATA_CLUMP_TYPE_PARAMETERS) {
 
-            val data = getMethodAndParamsToRefactor(
-                dataClumpClass,
-                ep.methodName!!,
-                relevantParameters,
-                calculateOffset(dataClumpFile.text, ep.position.startLine, ep.position.startColumn)
-            )
+            val data =
+                getMethodAndParamsToRefactor(
+                    dataClumpClass,
+                    ep.methodName!!,
+                    relevantParameters,
+                    calculateOffset(
+                        dataClumpFile.text,
+                        ep.position.startLine,
+                        ep.position.startColumn
+                    )
+                )
             if (data == null) {
                 // happens if already refactored
                 println("No data found parameters")
                 return false
             }
 
-            val extractedClass = classCreator.getOrCreateClass(
-                project,
-                suggestedClassName,
-                ep.dataClumpKey,
-                dataClumpFile,
-                data._3,
-                nameService
-            )
+            val extractedClass =
+                classCreator.getOrCreateClass(
+                    project,
+                    suggestedClassName,
+                    ep.dataClumpKey,
+                    dataClumpFile,
+                    data._3,
+                    nameService
+                )
             val method = data._1
             val methodParameters = method.parameterList.parameters.map { it.name }
             val methodUsages = refFinder.findMethodUsages(method)
-            handleOverridingMethods(method, relevantParameters, extractedClass, nameService, refFinder)
+            handleOverridingMethods(
+                method,
+                relevantParameters,
+                extractedClass,
+                nameService,
+                refFinder
+            )
             for (param in method.parameterList.parameters) {
                 if (param.name !in relevantParameters) {
                     println("ignore  parameter ${param.name}")
@@ -576,9 +631,14 @@ class ManualDataClumpRefactorer(
                 for (element in references) {
                     updateVariableUsage(project, extractedClass, element, nameService, true)
                 }
-
             }
-            updateMethodSignature(project, method, extractedClass, relevantParameters.toTypedArray(), nameService)
+            updateMethodSignature(
+                project,
+                method,
+                extractedClass,
+                relevantParameters.toTypedArray(),
+                nameService
+            )
 
             for (ref in methodUsages) {
                 val element = ref
@@ -592,9 +652,6 @@ class ManualDataClumpRefactorer(
                     methodParameters
                 )
             }
-
-
-
 
             return true
         } else if (dataClumpType == DATA_CLUMP_TYPE_FIELDS) {
@@ -628,18 +685,9 @@ class ManualDataClumpRefactorer(
                     nameService,
                     field.name
                 )
-
             }
             return true
         }
         return false
-
     }
 }
-
-
-
-
-
-
-

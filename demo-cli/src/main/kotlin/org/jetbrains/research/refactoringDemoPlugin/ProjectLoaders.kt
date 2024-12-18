@@ -6,7 +6,7 @@ import org.jetbrains.research.pluginUtilities.openRepository.getKotlinJavaReposi
 import java.nio.file.Path
 
 interface ProjectLoader {
-    fun loadProject(path: Path, executor: DataClumpContextData.DataClumpRefactorer.PluginExecutor): Unit
+    fun loadProject(path: Path, executor: DataClumpRefactorer.PluginExecutor): Unit
 }
 
 fun getLoader(loaderName: String): ProjectLoader {
@@ -21,7 +21,7 @@ fun getLoader(loaderName: String): ProjectLoader {
 }
 
 class OpenProjectWithResolveLoader : ProjectLoader {
-    override fun loadProject(path: Path, executor: DataClumpContextData.DataClumpRefactorer.PluginExecutor): Unit {
+    override fun loadProject(path: Path, executor: DataClumpRefactorer.PluginExecutor): Unit {
         val opener = getKotlinJavaRepositoryOpener()
         var result = opener.openProjectWithResolve(path) {
             val project = it
@@ -43,7 +43,7 @@ partially works with
     maven projects
 * */
 
-    override fun loadProject(path: Path, executor: DataClumpContextData.DataClumpRefactorer.PluginExecutor): Unit {
+    override fun loadProject(path: Path, executor: DataClumpRefactorer.PluginExecutor): Unit {
         val opener = getKotlinJavaRepositoryOpener()
         try {
             var result = opener.openSingleProject(path) {
@@ -68,7 +68,7 @@ works partially with
  intelli gradle
 */
 class OpenProjectLoader : ProjectLoader {
-    override fun loadProject(path: Path, executor: DataClumpContextData.DataClumpRefactorer.PluginExecutor): Unit {
+    override fun loadProject(path: Path, executor: DataClumpRefactorer.PluginExecutor): Unit {
         try {
             val result = ProjectUtil.openProject(path.toString(), null, true)
             executor.executePlugin(result!!)
@@ -93,7 +93,7 @@ partially works with
 
 
  */
-    override fun loadProject(path: Path, executor: DataClumpContextData.DataClumpRefactorer.PluginExecutor): Unit {
+    override fun loadProject(path: Path, executor: DataClumpRefactorer.PluginExecutor): Unit {
         try {
             val project = ProjectUtil.openOrImport(path, null, false)
             executor.executePlugin(project!!)
@@ -118,7 +118,7 @@ intelliJ maven project
 
 */
 class LoadAndOpenProjectLoader : ProjectLoader {
-    override fun loadProject(path: Path, executor: DataClumpContextData.DataClumpRefactorer.PluginExecutor): Unit {
+    override fun loadProject(path: Path, executor: DataClumpRefactorer.PluginExecutor): Unit {
         try {
             val projectManager = ProjectManager.getInstance()
             val project = projectManager.loadAndOpenProject(path.toString())!!
